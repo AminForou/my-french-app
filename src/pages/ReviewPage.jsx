@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, onSnapshot, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -12,91 +12,91 @@ function ReviewPage({ currentUser }) {
 
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [loaded, setLoaded] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
 
-  // --------------------------
-  // 1) Load Data (Firestore if logged in, else localStorage)
-  // --------------------------
+  // 1) On mount, if logged in => Firestore, else => localStorage
   useEffect(() => {
-    if (!currentUser) {
-      // Not logged in => local mode
+    let isMounted = true
+
+    async function loadFromFirestore(uid) {
+      const ref = doc(db, 'users', uid)
+      const snap = await getDoc(ref)
+      if (snap.exists()) {
+        return snap.data().leitnerBoxes
+      } else {
+        // Create default if no doc
+        const defaultBoxes = {}
+        words.forEach((w) => { defaultBoxes[w.id] = 1 })
+        await setDoc(ref, { leitnerBoxes: defaultBoxes })
+        return defaultBoxes
+      }
+    }
+
+    function loadFromLocal() {
       const stored = localStorage.getItem('leitnerBoxes')
       if (stored) {
-        setLeitnerBoxes(JSON.parse(stored))
+        return JSON.parse(stored)
       } else {
-        // create default local
+        // create default
         const init = {}
-        words.forEach(w => (init[w.id] = 1))
-        localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-        setLeitnerBoxes(init)
+        words.forEach((w) => { init[w.id] = 1 })
+        return init
       }
-      setLoaded(true)
-      return
     }
 
-    // Logged in => Firestore real-time with onSnapshot
-    const ref = doc(db, 'users', currentUser.uid)
-
-    async function createDefaultDoc() {
-      const defaultBoxes = {}
-      words.forEach(w => (defaultBoxes[w.id] = 1))
-      await setDoc(ref, { leitnerBoxes: defaultBoxes })
-    }
-
-    // Check if doc exists first
-    getDoc(ref).then(snap => {
-      if (!snap.exists()) {
-        // create doc
-        createDefaultDoc().then(() => {
-          const unsub = onSnapshot(ref, (s) => {
-            if (s.exists()) {
-              const data = s.data()
-              if (data.leitnerBoxes) {
-                setLeitnerBoxes(data.leitnerBoxes)
-              }
-              setLoaded(true)
-            }
-          })
-          // optionally keep unsub
-        })
-      } else {
-        // doc exists => just subscribe
-        const unsub = onSnapshot(ref, (s) => {
-          if (s.exists()) {
-            const data = s.data()
-            if (data.leitnerBoxes) {
-              setLeitnerBoxes(data.leitnerBoxes)
-            }
+    async function fetchData() {
+      if (currentUser) {
+        try {
+          const data = await loadFromFirestore(currentUser.uid)
+          if (isMounted) setLeitnerBoxes(data)
+        } catch (err) {
+          console.warn('Error loading from Firestore, fallback to local:', err)
+          if (isMounted) {
+            setLeitnerBoxes(loadFromLocal())
           }
-          setLoaded(true)
-        })
+        }
+      } else {
+        // not logged in => localStorage only
+        setLeitnerBoxes(loadFromLocal())
       }
-    })
+      setLoadingData(false)
+    }
+
+    fetchData()
+
+    return () => { isMounted = false }
   }, [currentUser])
 
-  // --------------------------
-  // 2) Save changes back to Firestore or localStorage
-  // --------------------------
+  // 2) Save changes
+  //    If user is logged in, save to Firestore
+  //    Always also store in localStorage for offline fallback
   useEffect(() => {
-    if (!loaded) return
+    if (loadingData) return
+    if (!Object.keys(leitnerBoxes).length) return
 
-    if (!currentUser) {
-      // local mode
-      localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
-      return
+    // localStorage fallback
+    localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
+
+    if (currentUser) {
+      const ref = doc(db, 'users', currentUser.uid)
+      setDoc(ref, { leitnerBoxes }, { merge: true })
+        .catch(err => console.error('Error saving data to Firestore:', err))
     }
+  }, [leitnerBoxes, currentUser, loadingData])
 
-    // Firestore mode
-    const ref = doc(db, 'users', currentUser.uid)
-    setDoc(ref, { leitnerBoxes }, { merge: true })
-      .catch(err => console.error('Error saving data', err))
-  }, [leitnerBoxes, currentUser, loaded])
-
-  // Filter the words for this box
-  const boxWords = words.filter(w => leitnerBoxes[w.id] === boxNumber)
+  // 3) Filter words in this box
+  const boxWords = words.filter(
+    (w) => leitnerBoxes[w.id] === boxNumber
+  )
+  // Slice to max 10 words
   const sessionWords = boxWords.slice(0, 10)
 
-  // Move word to next box
+  // 4) Current card index
+  const moveToNextCard = () => {
+    setCurrentIndex((prev) => prev + 1)
+  }
+
+  // 5) Handlers
   const moveToNextBox = (wordId) => {
     setLeitnerBoxes(prev => {
       const currentBox = prev[wordId]
@@ -105,27 +105,22 @@ function ReviewPage({ currentUser }) {
     })
   }
 
-  // Move word back to box 1
   const moveToBoxOne = (wordId) => {
-    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+    setLeitnerBoxes(prev => {
+      return { ...prev, [wordId]: 1 }
+    })
   }
 
-  // Current card index
-  const [currentCardIndex, setCurrentCardIndex] = useState(0)
-  const goToNextCard = () => {
-    setCurrentCardIndex(i => i + 1)
-  }
-
-  // If not loaded yet => show a spinner
-  if (!loaded) {
+  // If still loading data (Firestore fetch), show a spinner
+  if (loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+        <p>Loading your progress...</p>
       </div>
     )
   }
 
-  // If sessionWords is empty => box is empty
+  // If sessionWords empty => box is empty
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
@@ -138,19 +133,24 @@ function ReviewPage({ currentUser }) {
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
             <p className="text-gray-600 mb-8">
-              Great job! You've completed all the words in this box for now. Come back later or try another box.
+              Great job! You've completed all the words in this box for now. 
+              Come back later or try another box.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/lightner"
-                className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+                className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
+                           text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
+                           transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               >
                 Return to Boxes
               </Link>
               {boxNumber < 5 && (
                 <Link
                   to={`/review/${boxNumber + 1}`}
-                  className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transform transition-all duration-300 hover:-translate-y-0.5"
+                  className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
+                             text-blue-700 bg-blue-50 hover:bg-blue-100 transform transition-all duration-300 
+                             hover:-translate-y-0.5"
                 >
                   Try Box {boxNumber + 1}
                 </Link>
@@ -162,8 +162,8 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // If we've gone through all 10 words
-  if (currentCardIndex >= sessionWords.length) {
+  // If user finished the session
+  if (currentIndex >= sessionWords.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100 max-w-md w-full text-center">
@@ -177,12 +177,25 @@ function ReviewPage({ currentUser }) {
           </h2>
           <div className="space-y-4 mb-8">
             <p className="text-gray-600">
-              You've reviewed {sessionWords.length} word{sessionWords.length > 1 ? 's' : ''} in Box {boxNumber}.
+              You've reviewed {sessionWords.length} word{sessionWords.length > 1 ? 's' : ''} 
+              in Box {boxNumber}.
             </p>
+            <div className="flex justify-center gap-4 text-sm">
+              <div className="bg-blue-50 rounded-lg px-4 py-2">
+                <div className="font-semibold text-blue-700">Box {boxNumber}</div>
+                <div className="text-blue-600">{sessionWords.length} Words</div>
+              </div>
+              <div className="bg-lime-50 rounded-lg px-4 py-2">
+                <div className="font-semibold text-lime-700">Complete</div>
+                <div className="text-lime-600">100%</div>
+              </div>
+            </div>
           </div>
           <Link
             to="/lightner"
-            className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
+            className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
+                       text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
+                       transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
           >
             Return to Boxes
           </Link>
@@ -191,9 +204,9 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // Show current card
-  const currentWord = sessionWords[currentCardIndex]
-  const currentCardNumber = currentCardIndex + 1
+  // Otherwise, show current card
+  const currentWordData = sessionWords[currentIndex]
+  const currentCardNumber = currentIndex + 1
   const totalCards = sessionWords.length
   const progressPercentage = (currentCardNumber / totalCards) * 100
 
@@ -202,7 +215,9 @@ function ReviewPage({ currentUser }) {
       <div className="max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 shadow-sm border border-gray-100 mb-4">
+          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                          shadow-sm border border-gray-100 mb-4"
+          >
             <span className="text-sm font-medium text-gray-600">Box</span>
             <span className="text-sm font-bold text-blue-600">{boxNumber}</span>
           </div>
@@ -230,15 +245,17 @@ function ReviewPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Card Container */}
+        {/* Card */}
         <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white to-transparent 
+                          pointer-events-none"
+          />
           <Card
-            wordData={currentWord}
-            boxNumber={leitnerBoxes[currentWord.id]}
+            wordData={currentWordData}
+            boxNumber={leitnerBoxes[currentWordData.id]}
             moveToNextBox={moveToNextBox}
             moveToBoxOne={moveToBoxOne}
-            goToNextCard={goToNextCard}
+            goToNextCard={moveToNextCard}
           />
         </div>
       </div>

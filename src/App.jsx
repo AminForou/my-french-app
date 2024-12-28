@@ -19,12 +19,11 @@ function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user || null)
-      setAuthLoading(false) // done checking auth
+      setAuthLoading(false)
     })
     return () => unsubscribe()
   }, [])
 
-  // Sign out helper
   const handleSignOut = async () => {
     try {
       await signOut(auth)
@@ -34,7 +33,7 @@ function App() {
     }
   }
 
-  // If we're still loading Firebase auth state, show a quick loader or splash
+  // If still checking user state, show a quick loading
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -48,16 +47,16 @@ function App() {
       <Navbar currentUser={currentUser} onSignOut={handleSignOut} />
       <main className="flex-grow">
         <Routes>
-          {/* Public routes */}
+          {/* Public Routes */}
           <Route path="/" element={<HomePage currentUser={currentUser} />} />
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected routes */}
+          {/* Protected Routes */}
           <Route
             path="/lightner"
             element={
               <ProtectedRoute user={currentUser}>
-                <LightnerPage />
+                <LightnerPage currentUser={currentUser} />
               </ProtectedRoute>
             }
           />

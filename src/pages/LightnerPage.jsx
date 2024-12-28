@@ -1,87 +1,92 @@
-// src/pages/LightnerPage.jsx
+// src/pages/LightnerPage.js
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { doc, onSnapshot, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 
 function LightnerPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [showResetModal, setShowResetModal] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const [loadingData, setLoadingData] = useState(true)
 
   const boxes = [1, 2, 3, 4, 5]
 
-  // 1) Load data from Firestore if logged in, else local
+  // On mount, load from Firestore if logged in, else localStorage
   useEffect(() => {
-    if (!currentUser) {
-      // local
+    let isMounted = true
+
+    async function loadFromFirestore(uid) {
+      const ref = doc(db, 'users', uid)
+      const snap = await getDoc(ref)
+      if (snap.exists()) {
+        return snap.data().leitnerBoxes
+      } else {
+        // if no doc, create default in Firestore
+        const init = {}
+        words.forEach(word => {
+          init[word.id] = 1
+        })
+        await setDoc(ref, { leitnerBoxes: init })
+        return init
+      }
+    }
+
+    function loadFromLocal() {
       const stored = localStorage.getItem('leitnerBoxes')
       if (stored) {
-        setLeitnerBoxes(JSON.parse(stored))
+        return JSON.parse(stored)
       } else {
         const init = {}
-        words.forEach(w => (init[w.id] = 1))
-        localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-        setLeitnerBoxes(init)
-      }
-      setLoaded(true)
-      return
-    }
-
-    // Firestore real-time
-    const ref = doc(db, 'users', currentUser.uid)
-
-    async function createDefaultDoc() {
-      const init = {}
-      words.forEach(w => (init[w.id] = 1))
-      await setDoc(ref, { leitnerBoxes: init })
-    }
-
-    getDoc(ref).then(snap => {
-      if (!snap.exists()) {
-        // create doc
-        createDefaultDoc().then(() => {
-          const unsub = onSnapshot(ref, (s) => {
-            if (s.exists()) {
-              const data = s.data()
-              if (data.leitnerBoxes) {
-                setLeitnerBoxes(data.leitnerBoxes)
-              }
-              setLoaded(true)
-            }
-          })
-          // store unsub if needed
+        words.forEach(word => {
+          init[word.id] = 1
         })
+        return init
+      }
+    }
+
+    async function fetchData() {
+      if (currentUser) {
+        try {
+          const boxesData = await loadFromFirestore(currentUser.uid)
+          if (isMounted) setLeitnerBoxes(boxesData)
+        } catch (err) {
+          console.warn('Failed to load from Firestore, fallback to local:', err)
+          if (isMounted) setLeitnerBoxes(loadFromLocal())
+        }
       } else {
-        const unsub = onSnapshot(ref, (s) => {
-          if (s.exists()) {
-            const data = s.data()
-            if (data.leitnerBoxes) {
-              setLeitnerBoxes(data.leitnerBoxes)
-            }
-          }
-          setLoaded(true)
-        })
+        // Not logged in => local
+        setLeitnerBoxes(loadFromLocal())
       }
-    })
+      setLoadingData(false)
+    }
+
+    fetchData()
+
+    return () => {
+      isMounted = false
+    }
   }, [currentUser])
 
-  // 2) Save changes
+  // Whenever leitnerBoxes changes, save to Firestore (if logged in) & localStorage
   useEffect(() => {
-    if (!loaded) return
-    if (!currentUser) {
-      localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
-    } else {
+    if (loadingData) return
+    if (!Object.keys(leitnerBoxes).length) return
+
+    // localStorage fallback
+    localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
+
+    if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })
-        .catch(err => console.error('Error saving data', err))
+        .catch(err => console.error('Error saving data to Firestore:', err))
     }
-  }, [leitnerBoxes, currentUser, loaded])
+  }, [leitnerBoxes, currentUser, loadingData])
 
+  // Counting how many words in each box
   const getCountForBox = (boxNumber) => {
     let count = 0
-    for (let wordId in leitnerBoxes) {
+    for (const wordId in leitnerBoxes) {
       if (leitnerBoxes[wordId] === boxNumber) {
         count++
       }
@@ -89,7 +94,7 @@ function LightnerPage({ currentUser }) {
     return count
   }
 
-  // Basic "due" logic
+  // Determine if box is 'empty', 'due', or 'reviewed'
   const getBoxStatus = (box, count) => {
     if (count === 0) return 'empty'
     const today = new Date()
@@ -98,35 +103,31 @@ function LightnerPage({ currentUser }) {
     return daysSinceReview >= box ? 'due' : 'reviewed'
   }
 
+  // Reset progress => everyone to box 1, remove lastReview
   const handleReset = () => {
     const init = {}
-    boxes.forEach(b => localStorage.removeItem(`lastReview_box_${b}`))
-    words.forEach(w => (init[w.id] = 1))
+    words.forEach(word => {
+      init[word.id] = 1
+    })
     setLeitnerBoxes(init)
-
-    if (!currentUser) {
-      localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-    } else {
-      const ref = doc(db, 'users', currentUser.uid)
-      setDoc(ref, { leitnerBoxes: init })
-        .catch(err => console.error('Error resetting data', err))
-    }
-
+    boxes.forEach(box => {
+      localStorage.removeItem(`lastReview_box_${box}`)
+    })
+    // localStorage & Firestore updates will happen via useEffect
     setShowResetModal(false)
   }
 
-  // If not loaded => loading
-  if (!loaded) {
+  if (loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+        <p>Loading your boxes...</p>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
-      <div className="max-w-6xl mx-auto px-4 py-12 pt-20">
+      <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Header with Reset Button */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-12">
           <div className="text-center md:text-left mb-6 md:mb-0">
@@ -198,37 +199,51 @@ function LightnerPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Boxes Grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
           {boxes.map((box) => {
             const count = getCountForBox(box)
             const status = getBoxStatus(box, count)
-            
             return (
               <Link
                 key={box}
                 to={count > 0 ? `/review/${box}` : '#'}
-                className={`relative group ${count === 0 ? 'cursor-not-allowed' : 'transform transition-all duration-300 hover:-translate-y-1'}`}
+                className={`relative group ${
+                  count === 0 
+                    ? 'cursor-not-allowed' 
+                    : 'transform transition-all duration-300 hover:-translate-y-1'
+                }`}
               >
-                <div className={`
-                  absolute -inset-0.5 rounded-lg bg-gradient-to-r 
-                  ${status === 'due' ? 'from-blue-400 to-blue-500 animate-pulse' : 
-                    status === 'reviewed' ? 'from-lime-400 to-lime-500' : 
-                    'from-gray-200 to-gray-300'}
-                  opacity-75 group-hover:opacity-100 transition duration-300
-                `} />
+                <div
+                  className={`
+                    absolute -inset-0.5 rounded-lg bg-gradient-to-r 
+                    ${
+                      status === 'due' 
+                        ? 'from-blue-400 to-blue-500 animate-pulse'
+                        : status === 'reviewed'
+                          ? 'from-lime-400 to-lime-500'
+                          : 'from-gray-200 to-gray-300'
+                    }
+                    opacity-75 group-hover:opacity-100 transition duration-300 -z-10
+                  `}
+                />
                 
                 <div className="relative bg-white rounded-lg p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-3xl font-bold text-gray-900">
                       Box {box}
                     </span>
-                    <span className={`
-                      text-4xl font-extrabold
-                      ${status === 'due' ? 'text-blue-500' : 
-                        status === 'reviewed' ? 'text-lime-500' : 
-                        'text-gray-400'}
-                    `}>
+                    <span
+                      className={`
+                        text-4xl font-extrabold
+                        ${
+                          status === 'due'
+                            ? 'text-blue-500'
+                            : status === 'reviewed'
+                              ? 'text-lime-500'
+                              : 'text-gray-400'
+                        }
+                      `}
+                    >
                       {count}
                     </span>
                   </div>
@@ -236,25 +251,38 @@ function LightnerPage({ currentUser }) {
                   <div className="space-y-3">
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-500
-                          ${status === 'due' ? 'bg-gradient-to-r from-blue-400 to-blue-600' : 
-                            status === 'reviewed' ? 'bg-gradient-to-r from-lime-400 to-lime-600' : 
-                            'bg-gray-300'}
+                        className={`
+                          h-full transition-all duration-500
+                          ${
+                            status === 'due'
+                              ? 'bg-gradient-to-r from-blue-400 to-blue-600'
+                              : status === 'reviewed'
+                                ? 'bg-gradient-to-r from-lime-400 to-lime-600'
+                                : 'bg-gray-300'
+                          }
                         `}
                         style={{ width: `${(count / words.length) * 100}%` }}
                       />
                     </div>
                     
                     <div className="flex justify-between items-center text-sm">
-                      <span className={`
-                        font-medium
-                        ${status === 'due' ? 'text-blue-600' : 
-                          status === 'reviewed' ? 'text-lime-600' : 
-                          'text-gray-400'}
-                      `}>
-                        {status === 'due' ? 'Review Now' :
-                         status === 'reviewed' ? 'Up to Date' :
-                         'Empty Box'}
+                      <span
+                        className={`
+                          font-medium
+                          ${
+                            status === 'due'
+                              ? 'text-blue-600'
+                              : status === 'reviewed'
+                                ? 'text-lime-600'
+                                : 'text-gray-400'
+                          }
+                        `}
+                      >
+                        {status === 'due'
+                          ? 'Review Now'
+                          : status === 'reviewed'
+                            ? 'Up to Date'
+                            : 'Empty Box'}
                       </span>
                       <span className="text-gray-400 text-xs">
                         Review every {box === 1 ? 'day' : `${box} days`}
@@ -303,24 +331,27 @@ function LightnerPage({ currentUser }) {
 
         {/* Reset Confirmation Modal */}
         {showResetModal && (
-          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div 
+          <div
+            className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            onClick={() => setShowResetModal(false)}
+          >
+            <div
               className="bg-white rounded-2xl p-8 max-w-md w-full shadow-xl transform transition-all duration-300 scale-100 opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-6 text-center">
                 <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <svg 
-                    className="w-8 h-8 text-gray-600" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
+                  <svg
+                    className="w-8 h-8 text-gray-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
-                    <path 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round" 
-                      strokeWidth={2} 
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                     />
                   </svg>
                 </div>
@@ -339,7 +370,9 @@ function LightnerPage({ currentUser }) {
                 </button>
                 <button
                   onClick={handleReset}
-                  className="flex-1 px-4 py-3 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  className="flex-1 px-4 py-3 text-sm font-medium rounded-xl text-white bg-gradient-to-r 
+                             from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 
+                             transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                 >
                   Yes, Reset Everything
                 </button>

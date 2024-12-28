@@ -1,68 +1,131 @@
-// src/pages/ReviewPage.js
+// src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
+import { doc, onSnapshot, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
 
-function ReviewPage() {
-  // 1) Grab boxId from the URL param, e.g. /review/1 => boxId = '1'
+function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
-  const navigate = useNavigate()
   const boxNumber = parseInt(boxId, 10) || 1
 
-  // 2) Load or initialize Leitner box info from localStorage
-  const initialBoxState = () => {
-    const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) {
-      return JSON.parse(stored)
+  const [leitnerBoxes, setLeitnerBoxes] = useState({})
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+
+  // --------------------------
+  // 1) Load Data (Firestore if logged in, else localStorage)
+  // --------------------------
+  useEffect(() => {
+    if (!currentUser) {
+      // Not logged in => local mode
+      const stored = localStorage.getItem('leitnerBoxes')
+      if (stored) {
+        setLeitnerBoxes(JSON.parse(stored))
+      } else {
+        // create default local
+        const init = {}
+        words.forEach(w => (init[w.id] = 1))
+        localStorage.setItem('leitnerBoxes', JSON.stringify(init))
+        setLeitnerBoxes(init)
+      }
+      setLoaded(true)
+      return
     }
-    // If no data, everyone starts in box 1
-    const initBoxes = {}
-    words.forEach((w) => {
-      initBoxes[w.id] = 1
+
+    // Logged in => Firestore real-time with onSnapshot
+    const ref = doc(db, 'users', currentUser.uid)
+
+    async function createDefaultDoc() {
+      const defaultBoxes = {}
+      words.forEach(w => (defaultBoxes[w.id] = 1))
+      await setDoc(ref, { leitnerBoxes: defaultBoxes })
+    }
+
+    // Check if doc exists first
+    getDoc(ref).then(snap => {
+      if (!snap.exists()) {
+        // create doc
+        createDefaultDoc().then(() => {
+          const unsub = onSnapshot(ref, (s) => {
+            if (s.exists()) {
+              const data = s.data()
+              if (data.leitnerBoxes) {
+                setLeitnerBoxes(data.leitnerBoxes)
+              }
+              setLoaded(true)
+            }
+          })
+          // optionally keep unsub
+        })
+      } else {
+        // doc exists => just subscribe
+        const unsub = onSnapshot(ref, (s) => {
+          if (s.exists()) {
+            const data = s.data()
+            if (data.leitnerBoxes) {
+              setLeitnerBoxes(data.leitnerBoxes)
+            }
+          }
+          setLoaded(true)
+        })
+      }
     })
-    return initBoxes
-  }
-  const [leitnerBoxes, setLeitnerBoxes] = useState(initialBoxState)
+  }, [currentUser])
 
-  // 3) Filter words that belong to the chosen box
-  const boxWords = words.filter(
-    (w) => leitnerBoxes[w.id] === boxNumber
-  )
+  // --------------------------
+  // 2) Save changes back to Firestore or localStorage
+  // --------------------------
+  useEffect(() => {
+    if (!loaded) return
 
-  // 4) Slice to max 10 words for this session
+    if (!currentUser) {
+      // local mode
+      localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
+      return
+    }
+
+    // Firestore mode
+    const ref = doc(db, 'users', currentUser.uid)
+    setDoc(ref, { leitnerBoxes }, { merge: true })
+      .catch(err => console.error('Error saving data', err))
+  }, [leitnerBoxes, currentUser, loaded])
+
+  // Filter the words for this box
+  const boxWords = words.filter(w => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
 
-  // 5) Setup local state for the *currentIndex* of the card we’re viewing
-  const [currentIndex, setCurrentIndex] = useState(0)
-
-  // 6) Persist updates to leitnerBoxes in localStorage
-  useEffect(() => {
-    localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
-  }, [leitnerBoxes])
-
-  // 7) Handlers to move words to next box / reset to box 1
-  //    Then go to the next card
+  // Move word to next box
   const moveToNextBox = (wordId) => {
-    setLeitnerBoxes((prev) => {
+    setLeitnerBoxes(prev => {
       const currentBox = prev[wordId]
       const nextBox = currentBox < 5 ? currentBox + 1 : 5
       return { ...prev, [wordId]: nextBox }
     })
   }
 
+  // Move word back to box 1
   const moveToBoxOne = (wordId) => {
-    setLeitnerBoxes((prev) => {
-      return { ...prev, [wordId]: 1 }
-    })
+    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
   }
 
-  // 8) Move to the next card index
+  // Current card index
+  const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const goToNextCard = () => {
-    setCurrentIndex((prev) => prev + 1)
+    setCurrentCardIndex(i => i + 1)
   }
 
-  // 9) If sessionWords is empty => no words in this box
+  // If not loaded yet => show a spinner
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    )
+  }
+
+  // If sessionWords is empty => box is empty
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
@@ -99,8 +162,8 @@ function ReviewPage() {
     )
   }
 
-  // 10) If user has gone through all 10 words in the session
-  if (currentIndex >= sessionWords.length) {
+  // If we've gone through all 10 words
+  if (currentCardIndex >= sessionWords.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100 max-w-md w-full text-center">
@@ -116,16 +179,6 @@ function ReviewPage() {
             <p className="text-gray-600">
               You've reviewed {sessionWords.length} word{sessionWords.length > 1 ? 's' : ''} in Box {boxNumber}.
             </p>
-            <div className="flex justify-center gap-4 text-sm">
-              <div className="bg-blue-50 rounded-lg px-4 py-2">
-                <div className="font-semibold text-blue-700">Box {boxNumber}</div>
-                <div className="text-blue-600">{sessionWords.length} Words</div>
-              </div>
-              <div className="bg-lime-50 rounded-lg px-4 py-2">
-                <div className="font-semibold text-lime-700">Complete</div>
-                <div className="text-lime-600">100%</div>
-              </div>
-            </div>
           </div>
           <Link
             to="/lightner"
@@ -138,10 +191,9 @@ function ReviewPage() {
     )
   }
 
-  // 11) Get the current word data from the session
-  const currentWordData = sessionWords[currentIndex]
-
-  const currentCardNumber = currentIndex + 1
+  // Show current card
+  const currentWord = sessionWords[currentCardIndex]
+  const currentCardNumber = currentCardIndex + 1
   const totalCards = sessionWords.length
   const progressPercentage = (currentCardNumber / totalCards) * 100
 
@@ -182,8 +234,8 @@ function ReviewPage() {
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white to-transparent pointer-events-none" />
           <Card
-            wordData={currentWordData}
-            boxNumber={leitnerBoxes[currentWordData.id]}
+            wordData={currentWord}
+            boxNumber={leitnerBoxes[currentWord.id]}
             moveToNextBox={moveToNextBox}
             moveToBoxOne={moveToBoxOne}
             goToNextCard={goToNextCard}

@@ -1,31 +1,84 @@
-// src/pages/LightnerPage.js
+// src/pages/LightnerPage.jsx
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { doc, onSnapshot, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '../firebase'
 import { words } from '../data/words'
 
-function LightnerPage() {
-  // 1) Load Leitner box states from localStorage or default to everyone in box 1
+function LightnerPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [showResetModal, setShowResetModal] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
-  useEffect(() => {
-    const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) {
-      setLeitnerBoxes(JSON.parse(stored))
-    } else {
-      // If no data in localStorage, initialize everyone to box 1
-      const init = {}
-      words.forEach(word => {
-        init[word.id] = 1
-      })
-      setLeitnerBoxes(init)
-    }
-  }, [])
-
-  // 2) We have 5 boxes in our Leitner system
   const boxes = [1, 2, 3, 4, 5]
 
-  // 3) Count how many words are in each box
+  // 1) Load data from Firestore if logged in, else local
+  useEffect(() => {
+    if (!currentUser) {
+      // local
+      const stored = localStorage.getItem('leitnerBoxes')
+      if (stored) {
+        setLeitnerBoxes(JSON.parse(stored))
+      } else {
+        const init = {}
+        words.forEach(w => (init[w.id] = 1))
+        localStorage.setItem('leitnerBoxes', JSON.stringify(init))
+        setLeitnerBoxes(init)
+      }
+      setLoaded(true)
+      return
+    }
+
+    // Firestore real-time
+    const ref = doc(db, 'users', currentUser.uid)
+
+    async function createDefaultDoc() {
+      const init = {}
+      words.forEach(w => (init[w.id] = 1))
+      await setDoc(ref, { leitnerBoxes: init })
+    }
+
+    getDoc(ref).then(snap => {
+      if (!snap.exists()) {
+        // create doc
+        createDefaultDoc().then(() => {
+          const unsub = onSnapshot(ref, (s) => {
+            if (s.exists()) {
+              const data = s.data()
+              if (data.leitnerBoxes) {
+                setLeitnerBoxes(data.leitnerBoxes)
+              }
+              setLoaded(true)
+            }
+          })
+          // store unsub if needed
+        })
+      } else {
+        const unsub = onSnapshot(ref, (s) => {
+          if (s.exists()) {
+            const data = s.data()
+            if (data.leitnerBoxes) {
+              setLeitnerBoxes(data.leitnerBoxes)
+            }
+          }
+          setLoaded(true)
+        })
+      }
+    })
+  }, [currentUser])
+
+  // 2) Save changes
+  useEffect(() => {
+    if (!loaded) return
+    if (!currentUser) {
+      localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
+    } else {
+      const ref = doc(db, 'users', currentUser.uid)
+      setDoc(ref, { leitnerBoxes }, { merge: true })
+        .catch(err => console.error('Error saving data', err))
+    }
+  }, [leitnerBoxes, currentUser, loaded])
+
   const getCountForBox = (boxNumber) => {
     let count = 0
     for (let wordId in leitnerBoxes) {
@@ -36,7 +89,7 @@ function LightnerPage() {
     return count
   }
 
-  // Add new function to determine review status
+  // Basic "due" logic
   const getBoxStatus = (box, count) => {
     if (count === 0) return 'empty'
     const today = new Date()
@@ -46,22 +99,29 @@ function LightnerPage() {
   }
 
   const handleReset = () => {
-    // Initialize everyone to box 1
     const init = {}
-    words.forEach(word => {
-      init[word.id] = 1
-    })
+    boxes.forEach(b => localStorage.removeItem(`lastReview_box_${b}`))
+    words.forEach(w => (init[w.id] = 1))
     setLeitnerBoxes(init)
-    
-    // Clear all last review dates
-    boxes.forEach(box => {
-      localStorage.removeItem(`lastReview_box_${box}`)
-    })
-    
-    // Save to localStorage
-    localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-    
+
+    if (!currentUser) {
+      localStorage.setItem('leitnerBoxes', JSON.stringify(init))
+    } else {
+      const ref = doc(db, 'users', currentUser.uid)
+      setDoc(ref, { leitnerBoxes: init })
+        .catch(err => console.error('Error resetting data', err))
+    }
+
     setShowResetModal(false)
+  }
+
+  // If not loaded => loading
+  if (!loaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    )
   }
 
   return (
@@ -138,6 +198,7 @@ function LightnerPage() {
           </div>
         </div>
 
+        {/* Boxes Grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
           {boxes.map((box) => {
             const count = getCountForBox(box)

@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.js
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, setDoc, onSnapshot } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -14,24 +14,18 @@ function ReviewPage({ currentUser }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
 
-  // Fallback loader from localStorage
+  // fallback for guests or if snapshot fails
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) {
-      return JSON.parse(stored)
-    } else {
-      const initBoxes = {}
-      words.forEach((w) => {
-        initBoxes[w.id] = 1
-      })
-      return initBoxes
-    }
+    if (stored) return JSON.parse(stored)
+    const init = {}
+    words.forEach(w => { init[w.id] = 1 })
+    return init
   }
 
-  // On mount, real-time listener or fallback
   useEffect(() => {
     if (!currentUser) {
-      // Not logged in => local
+      // not logged in => local
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
@@ -40,18 +34,17 @@ function ReviewPage({ currentUser }) {
     const ref = doc(db, 'users', currentUser.uid)
     const unsub = onSnapshot(ref, snapshot => {
       if (snapshot.exists()) {
-        const serverData = snapshot.data().leitnerBoxes || {}
-        setLeitnerBoxes(serverData)
+        setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
       } else {
-        // If no doc, create default
+        // doc not found => create default
         const init = {}
         words.forEach(w => { init[w.id] = 1 })
-        setDoc(ref, { leitnerBoxes: init }, { merge: true })
+        setDoc(ref, { leitnerBoxes: init })
         setLeitnerBoxes(init)
       }
       setLoadingData(false)
-    }, err => {
-      console.warn('onSnapshot error (ReviewPage), fallback local:', err)
+    }, (err) => {
+      console.warn('onSnapshot error in ReviewPage, fallback local:', err)
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
     })
@@ -59,7 +52,7 @@ function ReviewPage({ currentUser }) {
     return () => unsub()
   }, [currentUser])
 
-  // Save changes => localStorage & Firestore
+  // Save to local + Firestore
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
@@ -69,24 +62,24 @@ function ReviewPage({ currentUser }) {
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })
-        .catch(err => console.error('Error saving to Firestore:', err))
+        .catch(e => console.error('Saving to Firestore failed:', e))
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Filter words for the chosen box
+  // Filter the words for this box
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
-  // Up to 10
   const sessionWords = boxWords.slice(0, 10)
 
   const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
 
   const moveToNextBox = (wordId) => {
     setLeitnerBoxes(prev => {
-      const curBox = prev[wordId]
-      const nextBox = curBox < 5 ? curBox + 1 : 5
+      const currentBox = prev[wordId]
+      const nextBox = currentBox < 5 ? currentBox + 1 : 5
       return { ...prev, [wordId]: nextBox }
     })
   }
+
   const moveToBoxOne = (wordId) => {
     setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
   }
@@ -94,12 +87,12 @@ function ReviewPage({ currentUser }) {
   if (loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading review session...</p>
+        <p>Loading review data...</p>
       </div>
     )
   }
 
-  // If no words => box is empty
+  // If no words => box empty
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
@@ -112,8 +105,7 @@ function ReviewPage({ currentUser }) {
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
             <p className="text-gray-600 mb-8">
-              Great job! You've completed all the words in this box for now. 
-              Come back later or try another box.
+              Great job! You've completed all the words in this box for now. Come back later or try another box.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
@@ -128,7 +120,8 @@ function ReviewPage({ currentUser }) {
                 <Link
                   to={`/review/${boxNumber + 1}`}
                   className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
-                             text-blue-700 bg-blue-50 hover:bg-blue-100 transform transition-all duration-300 hover:-translate-y-0.5"
+                             text-blue-700 bg-blue-50 hover:bg-blue-100 transform transition-all duration-300 
+                             hover:-translate-y-0.5"
                 >
                   Try Box {boxNumber + 1}
                 </Link>
@@ -193,7 +186,9 @@ function ReviewPage({ currentUser }) {
       <div className="max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 shadow-sm border border-gray-100 mb-4">
+          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                          shadow-sm border border-gray-100 mb-4"
+          >
             <span className="text-sm font-medium text-gray-600">Box</span>
             <span className="text-sm font-bold text-blue-600">{boxNumber}</span>
           </div>

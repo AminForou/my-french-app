@@ -1,6 +1,11 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { 
+  getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager
+} from 'firebase/firestore'
 
 const firebaseConfig = {
     apiKey: "AIzaSyDGsb7CgepFZlTJd1NEO2-RgrpXcCwq2aY",
@@ -10,7 +15,13 @@ const firebaseConfig = {
     messagingSenderId: "976748305651",
     appId: "1:976748305651:web:2fda9e2b0bfa05faf7ab86"
 }
-
+// Initialize Firebase
 const app = initializeApp(firebaseConfig)
+
+// Services
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache(/*settings*/ {
+    tabManager: persistentSingleTabManager()
+  })
+})

@@ -1,7 +1,7 @@
 // src/pages/LightnerPage.js
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, setDoc, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 
@@ -12,81 +12,70 @@ function LightnerPage({ currentUser }) {
 
   const boxes = [1, 2, 3, 4, 5]
 
-  // On mount, load from Firestore if logged in, else localStorage
+  // --- HELPER: load from localStorage (for fallback) ---
+  function loadFromLocal() {
+    const stored = localStorage.getItem('leitnerBoxes')
+    if (stored) {
+      return JSON.parse(stored)
+    } else {
+      const init = {}
+      words.forEach(word => { init[word.id] = 1 })
+      return init
+    }
+  }
+
+  // --- On mount, set up Firestore real-time listener if logged in, else local storage
   useEffect(() => {
-    let isMounted = true
-
-    async function loadFromFirestore(uid) {
-      const ref = doc(db, 'users', uid)
-      const snap = await getDoc(ref)
-      if (snap.exists()) {
-        return snap.data().leitnerBoxes
-      } else {
-        // if no doc, create default in Firestore
-        const init = {}
-        words.forEach(word => {
-          init[word.id] = 1
-        })
-        await setDoc(ref, { leitnerBoxes: init })
-        return init
-      }
+    if (!currentUser) {
+      // Not logged in => local only
+      setLeitnerBoxes(loadFromLocal())
+      setLoadingData(false)
+      return
     }
 
-    function loadFromLocal() {
-      const stored = localStorage.getItem('leitnerBoxes')
-      if (stored) {
-        return JSON.parse(stored)
+    const ref = doc(db, 'users', currentUser.uid)
+    const unsubscribe = onSnapshot(ref, snapshot => {
+      if (snapshot.exists()) {
+        // Merge with local to avoid overwriting if offline changes
+        const serverData = snapshot.data().leitnerBoxes || {}
+        setLeitnerBoxes(serverData)
       } else {
+        // If no doc, create a default
         const init = {}
-        words.forEach(word => {
-          init[word.id] = 1
-        })
-        return init
-      }
-    }
-
-    async function fetchData() {
-      if (currentUser) {
-        try {
-          const boxesData = await loadFromFirestore(currentUser.uid)
-          if (isMounted) setLeitnerBoxes(boxesData)
-        } catch (err) {
-          console.warn('Failed to load from Firestore, fallback to local:', err)
-          if (isMounted) setLeitnerBoxes(loadFromLocal())
-        }
-      } else {
-        // Not logged in => local
-        setLeitnerBoxes(loadFromLocal())
+        words.forEach(word => { init[word.id] = 1 })
+        setDoc(ref, { leitnerBoxes: init }, { merge: true })
+        setLeitnerBoxes(init)
       }
       setLoadingData(false)
-    }
+    }, err => {
+      console.warn('onSnapshot failed, fallback to localStorage:', err)
+      setLeitnerBoxes(loadFromLocal())
+      setLoadingData(false)
+    })
 
-    fetchData()
-
-    return () => {
-      isMounted = false
-    }
+    return () => unsubscribe()
   }, [currentUser])
 
-  // Whenever leitnerBoxes changes, save to Firestore (if logged in) & localStorage
+  // --- Whenever leitnerBoxes changes, update localStorage and Firestore
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
-    // localStorage fallback
+    // Save to local storage
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
+    // If logged in, also save to Firestore
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })
-        .catch(err => console.error('Error saving data to Firestore:', err))
+        .catch(err => console.error('Error saving to Firestore:', err))
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Counting how many words in each box
+  // -------------- BOX / PROGRESS LOGIC --------------
   const getCountForBox = (boxNumber) => {
     let count = 0
-    for (const wordId in leitnerBoxes) {
+    for (let wordId in leitnerBoxes) {
       if (leitnerBoxes[wordId] === boxNumber) {
         count++
       }
@@ -94,7 +83,6 @@ function LightnerPage({ currentUser }) {
     return count
   }
 
-  // Determine if box is 'empty', 'due', or 'reviewed'
   const getBoxStatus = (box, count) => {
     if (count === 0) return 'empty'
     const today = new Date()
@@ -103,24 +91,24 @@ function LightnerPage({ currentUser }) {
     return daysSinceReview >= box ? 'due' : 'reviewed'
   }
 
-  // Reset progress => everyone to box 1, remove lastReview
+  // -------------- RESET LOGIC --------------
   const handleReset = () => {
     const init = {}
     words.forEach(word => {
       init[word.id] = 1
     })
     setLeitnerBoxes(init)
-    boxes.forEach(box => {
-      localStorage.removeItem(`lastReview_box_${box}`)
-    })
-    // localStorage & Firestore updates will happen via useEffect
+
+    // Clear lastReview
+    boxes.forEach(box => localStorage.removeItem(`lastReview_box_${box}`))
+
     setShowResetModal(false)
   }
 
   if (loadingData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading your boxes...</p>
+        <p>Loading Boxes...</p>
       </div>
     )
   }
@@ -203,6 +191,7 @@ function LightnerPage({ currentUser }) {
           {boxes.map((box) => {
             const count = getCountForBox(box)
             const status = getBoxStatus(box, count)
+            
             return (
               <Link
                 key={box}
@@ -213,19 +202,16 @@ function LightnerPage({ currentUser }) {
                     : 'transform transition-all duration-300 hover:-translate-y-1'
                 }`}
               >
-                <div
-                  className={`
-                    absolute -inset-0.5 rounded-lg bg-gradient-to-r 
-                    ${
-                      status === 'due' 
-                        ? 'from-blue-400 to-blue-500 animate-pulse'
-                        : status === 'reviewed'
-                          ? 'from-lime-400 to-lime-500'
-                          : 'from-gray-200 to-gray-300'
-                    }
-                    opacity-75 group-hover:opacity-100 transition duration-300 -z-10
-                  `}
-                />
+                <div className={`
+                  absolute -inset-0.5 rounded-lg bg-gradient-to-r 
+                  ${status === 'due' 
+                    ? 'from-blue-400 to-blue-500 animate-pulse' 
+                    : status === 'reviewed' 
+                      ? 'from-lime-400 to-lime-500'
+                      : 'from-gray-200 to-gray-300'
+                  }
+                  opacity-75 group-hover:opacity-100 transition duration-300 -z-10
+                `} />
                 
                 <div className="relative bg-white rounded-lg p-6 shadow-lg">
                   <div className="flex items-center justify-between mb-4">
@@ -335,23 +321,23 @@ function LightnerPage({ currentUser }) {
             className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={() => setShowResetModal(false)}
           >
-            <div
+            <div 
               className="bg-white rounded-2xl p-8 max-w-md w-full shadow-xl transform transition-all duration-300 scale-100 opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-6 text-center">
                 <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <svg
-                    className="w-8 h-8 text-gray-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
+                  <svg 
+                    className="w-8 h-8 text-gray-600" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
                     stroke="currentColor"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
                     />
                   </svg>
                 </div>

@@ -1,4 +1,4 @@
-// src/pages/ReviewPage.js
+// src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
@@ -25,7 +25,7 @@ function ReviewPage({ currentUser }) {
 
   useEffect(() => {
     if (!currentUser) {
-      // not logged in => local
+      // not logged in => load local
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
@@ -57,8 +57,10 @@ function ReviewPage({ currentUser }) {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
+    // Save to local
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
+    // If logged in, save to Firestore
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })

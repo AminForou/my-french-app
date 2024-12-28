@@ -33,7 +33,6 @@ function App() {
     }
   }
 
-  // If still checking user state, show a quick loading
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">

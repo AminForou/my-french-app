@@ -10,31 +10,46 @@ function Card({
   goToNextCard
 }) {
   const [isFlipped, setIsFlipped] = useState(false)
-
-  // Track swipe direction for CSS animation
-  // Possible values: 'left', 'right', or null
   const [swipeDirection, setSwipeDirection] = useState(null)
+  
+  // Store all voices in state, updated via onvoiceschanged
+  const [allVoices, setAllVoices] = useState([])
 
-  // We'll store touch coordinates in refs
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
+  const SWIPE_THRESHOLD = 50
 
-  const SWIPE_THRESHOLD = 50  // px
+  // 1) On mount, listen for voice changes. This helps Safari populate voices.
+  useEffect(() => {
+    const handleVoicesChanged = () => {
+      const voices = window.speechSynthesis.getVoices()
+      setAllVoices(voices)
+    }
+
+    // If onvoiceschanged fires after load
+    window.speechSynthesis.onvoiceschanged = handleVoicesChanged
+    // Also call once now (Chrome might have them immediately)
+    handleVoicesChanged()
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null
+    }
+  }, [])
 
   // Flip card
   const handleFlip = useCallback(() => {
     setIsFlipped(prev => !prev)
   }, [])
 
-  // When animation finishes, actually finalize "Need Practice"
+  // FINALIZE "Need Practice"
   const finalizeWrong = useCallback(() => {
     moveToBoxOne(wordData.id)
     goToNextCard()
     setIsFlipped(false)
-    setSwipeDirection(null)  // reset swipe direction
+    setSwipeDirection(null)
   }, [moveToBoxOne, goToNextCard, wordData.id])
 
-  // When animation finishes, actually finalize "Know It"
+  // FINALIZE "Know It"
   const finalizeCorrect = useCallback(() => {
     moveToNextBox(wordData.id)
     goToNextCard()
@@ -42,40 +57,48 @@ function Card({
     setSwipeDirection(null)
   }, [moveToNextBox, goToNextCard, wordData.id])
 
-  // Animate wrong
+  // Animate "Wrong"
   const handleWrong = useCallback(() => {
-    // If we already have a swipe direction, don’t overlap animations
     if (swipeDirection) return
-    setSwipeDirection('left') // triggers CSS .swipeleft
-    // Wait for .5s animation to finish, then finalize
+    setSwipeDirection('left')
     setTimeout(() => finalizeWrong(), 500)
   }, [swipeDirection, finalizeWrong])
 
-  // Animate correct
+  // Animate "Correct"
   const handleCorrect = useCallback(() => {
     if (swipeDirection) return
     setSwipeDirection('right')
     setTimeout(() => finalizeCorrect(), 500)
   }, [swipeDirection, finalizeCorrect])
 
-  // Pronounce in French
+  // 2) Pronounce in French, always preferring "Amélie" if found
   const handlePronounce = useCallback(() => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(wordData.word)
-      utterance.lang = 'fr-FR'
-
-      const voices = window.speechSynthesis.getVoices()
-      const frenchVoice = voices.find(voice =>
-        voice.lang === 'fr-FR' || voice.lang.startsWith('fr')
-      )
-      if (frenchVoice) {
-        utterance.voice = frenchVoice
-      }
-      window.speechSynthesis.speak(utterance)
-    } else {
+    if (!('speechSynthesis' in window)) {
       alert('Sorry, your browser does not support speech synthesis.')
+      return
     }
-  }, [wordData.word])
+
+    const utterance = new SpeechSynthesisUtterance(wordData.word)
+    utterance.lang = 'fr-FR'
+
+    // 2a) Attempt to find voice with "Amélie" or "Amelie" in name
+    let chosenVoice = allVoices.find(voice =>
+      voice.name.toLowerCase().includes('amélie') ||
+      voice.name.toLowerCase().includes('amelie')
+    )
+
+    // 2b) If not found, fallback to any fr-FR
+    if (!chosenVoice) {
+      chosenVoice = allVoices.find(voice => voice.lang.startsWith('fr'))
+    }
+
+    if (chosenVoice) {
+      utterance.voice = chosenVoice
+      // Optionally: utterance.rate = 0.95; // slow down slightly, etc.
+    }
+
+    window.speechSynthesis.speak(utterance)
+  }, [allVoices, wordData.word])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -104,7 +127,7 @@ function Card({
     }
   }, [handleFlip, handleWrong, handleCorrect, handlePronounce])
 
-  // Touch/Swipe logic
+  // Touch logic for swipes
   const handleTouchStart = (e) => {
     if (e.touches.length !== 1) return
     touchStartX.current = e.touches[0].clientX
@@ -113,7 +136,6 @@ function Card({
 
   const handleTouchMove = (e) => {
     if (e.touches.length !== 1 || touchStartX.current == null) return
-    // (Optional) track movement in real time
   }
 
   const handleTouchEnd = (e) => {
@@ -124,37 +146,30 @@ function Card({
     const absDeltaX = Math.abs(deltaX)
     const absDeltaY = Math.abs(deltaY)
 
-    // reset
     touchStartX.current = null
     touchStartY.current = null
 
     // Check horizontal swipe
     if (absDeltaX > SWIPE_THRESHOLD && absDeltaX > absDeltaY) {
-      // horizontal swipe
       if (deltaX > 0) {
-        // right => animate correct
         handleCorrect()
       } else {
-        // left => animate wrong
         handleWrong()
       }
       return
     }
 
-    // Otherwise, it's a tap.
-    // Check if tap was on the Pronounce or ShowMeaning button => skip handleFlip
+    // Tap
     const target = e.target
     const isPronounce = target.closest(`.${styles.pronounceButton}`)
     const isShowMeaning = target.closest(`.${styles.showButton}`)
     if (isPronounce || isShowMeaning) {
       return
     }
-    // tap on card => flip
     handleFlip()
   }
 
-  // Construct dynamic classes
-  // e.g., "card swipeleft" or "card swiperight" if user swiped
+  // Add .swipeleft or .swiperight for the CSS animations
   const swipeClass = swipeDirection === 'left'
     ? styles.swipeleft
     : swipeDirection === 'right'
@@ -170,11 +185,11 @@ function Card({
     >
       <div className={`${styles.cardInner} ${isFlipped ? styles.flipped : ''}`}>
         
-        {/* Front */}
+        {/* Front side */}
         <div className={styles.cardFront}>
           <div className={styles.boxNumber}>Box #{boxNumber}</div>
 
-          {/* Pronounce button */}
+          {/* Pronounce Button */}
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -184,8 +199,12 @@ function Card({
             title="Listen to pronunciation"
           >
             <svg className={styles.soundIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.788v6.424a.5.5 0 00.757.429l5.158-3.212a.5.5 0 000-.858L7.257 8.36a.5.5 0 00-.757.429z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.788v6.424a.5.5 0 00.757.429l5.158-3.212a.5.5 0 000-.858L7.257 8.36a.5.5 0 00-.757.429z"
+              />
             </svg>
           </button>
 
@@ -203,7 +222,7 @@ function Card({
           </button>
         </div>
 
-        {/* Back */}
+        {/* Back side */}
         <div className={styles.cardBack}>
           <div className={styles.boxNumber}>Box #{boxNumber}</div>
           <div className={styles.content}>
@@ -229,14 +248,24 @@ function Card({
             <div className={styles.buttons}>
               <button className={styles.wrongButton} onClick={() => handleWrong()}>
                 <svg className={styles.arrowIcon} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                  />
                 </svg>
                 <span>Need Practice</span>
               </button>
               <button className={styles.correctButton} onClick={() => handleCorrect()}>
                 <span>Know It</span>
                 <svg className={styles.arrowIcon} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M14 5l7 7m0 0l-7 7m7-7H3"
+                  />
                 </svg>
               </button>
             </div>

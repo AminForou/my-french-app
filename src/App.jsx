@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
 import './App.css'
+import Footer from './components/Footer'
 
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
@@ -71,9 +72,8 @@ function App() {
         </Routes>
       </main>
 
-      <footer className="bg-gray-200 text-gray-700 text-sm px-6 py-4 text-center">
-        © 2024 My Company — All Rights Reserved.
-      </footer>
+      <Footer />
+
     </div>
   )
 }

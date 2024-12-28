@@ -1,0 +1,272 @@
+.card {
+    perspective: 1500px;
+    width: 100%;
+    height: 450px; /* Slightly reduced height */
+    position: relative;
+    margin: 1rem auto;
+    max-width: 600px;
+    transition: transform 0.3s ease-out;
+  }
+  
+  /* For the flip animation (front/back) */
+  .cardInner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  
+  .cardInner.flipped {
+    transform: rotateY(180deg);
+  }
+  
+  /* The "Front" and "Back" sides */
+  .cardFront,
+  .cardBack {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    background: white;
+    border-radius: 1.5rem;
+    padding: 3rem 2rem 2rem; /* top padding for box number */
+    box-shadow: 
+      0 10px 20px rgba(0, 0, 0, 0.08),
+      0 6px 6px rgba(0, 0, 0, 0.12),
+      0 0 0 1px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .cardBack {
+    transform: rotateY(180deg);
+  }
+  
+  /* 
+    SWIPE Animations
+    Fade out, rotate, move off screen
+  */
+  .swipeleft {
+    animation: swipeLeftAnim 0.5s forwards cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .swiperight {
+    animation: swipeRightAnim 0.5s forwards cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  @keyframes swipeLeftAnim {
+    0% {
+      transform: translateX(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(-150%) rotate(-30deg);
+      opacity: 0;
+    }
+  }
+  
+  @keyframes swipeRightAnim {
+    0% {
+      transform: translateX(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(150%) rotate(30deg);
+      opacity: 0;
+    }
+  }
+  
+  /* Box number, etc. */
+  .boxNumber {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: #f0fdf4;
+    padding: 0.4rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    color: #15803d;
+    font-weight: 600;
+    border: 2px solid #86efac;
+    z-index: 10;
+  }
+  
+  .word {
+    font-size: 3rem;
+    font-weight: 800;
+    text-align: center;
+    margin: auto;
+    color: #1f2937;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    letter-spacing: -0.025em;
+  }
+  
+  /* Show Meaning button, etc. */
+  .showButton {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    padding: 0.875rem 2rem;
+    border-radius: 1rem;
+    font-weight: 600;
+    font-size: 1.125rem;
+    transition: all 0.3s;
+    margin-top: auto;
+    border: none;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+  }
+  .showButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.4);
+  }
+  
+  /* Content styling, etc. */
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+  
+  .field {
+    background: #f8fafc;
+    padding: 0.875rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+  }
+  .field:hover {
+    background: #f1f5f9;
+    transform: translateX(4px);
+  }
+  .fieldLabel {
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+  }
+  .fieldContent {
+    color: #1f2937;
+    line-height: 1.4;
+    font-size: 1rem;
+  }
+  
+  .actionArea {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .buttons {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    position: relative;
+    z-index: 20;
+  }
+  
+  .correctButton,
+  .wrongButton {
+    flex: 1;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+    color: white;
+    letter-spacing: 0.025em;
+  }
+  
+  .correctButton {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2),
+                0 2px 4px -2px rgba(37, 99, 235, 0.1);
+  }
+  .correctButton:hover {
+    transform: translateY(-2px) translateX(2px);
+    box-shadow: 0 12px 20px -6px rgba(37, 99, 235, 0.25),
+                0 4px 8px -4px rgba(37, 99, 235, 0.15);
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  }
+  
+  .wrongButton {
+    background: linear-gradient(135deg, #475569, #334155);
+    box-shadow: 0 4px 6px -1px rgba(71, 85, 105, 0.2),
+                0 2px 4px -2px rgba(71, 85, 105, 0.1);
+  }
+  .wrongButton:hover {
+    transform: translateY(-2px) translateX(-2px);
+    box-shadow: 0 12px 20px -6px rgba(71, 85, 105, 0.25),
+                0 4px 8px -4px rgba(71, 85, 105, 0.15);
+    background: linear-gradient(135deg, #334155, #1e293b);
+  }
+  
+  .keyboardHint {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.5rem;
+  }
+  .keyboardHint kbd {
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  }
+  
+  .arrowIcon {
+    width: 1.25rem;
+    height: 1.25rem;
+    transition: transform 0.3s ease;
+  }
+  .wrongButton:hover .arrowIcon {
+    transform: translateX(-4px);
+  }
+  .correctButton:hover .arrowIcon {
+    transform: translateX(4px);
+  }
+  
+  .pronounceButton {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    background: #f0f9ff;
+    border: 2px solid #93c5fd;
+    color: #2563eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    cursor: pointer;
+    z-index: 10;
+  }
+  .pronounceButton:hover {
+    transform: scale(1.05);
+    background: #e0f2fe;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
+  }
+  .pronounceButton:active {
+    transform: scale(0.95);
+  }
+  
+  .soundIcon {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  

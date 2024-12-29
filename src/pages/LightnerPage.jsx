@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { words } from '../data/words'
-import { doc, getDoc, setDoc } from 'firebase/firestore'  // <-- import Firestore
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import LoadingState from '../components/LoadingState'
 
@@ -11,10 +11,8 @@ function LightnerPage({ currentUser }) {
   const [showResetModal, setShowResetModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
-  // We have 5 boxes in our Leitner system
   const boxes = [1, 2, 3, 4, 5]
 
-  // local fallback load
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
@@ -25,16 +23,13 @@ function LightnerPage({ currentUser }) {
     return init
   }
 
-  // On mount, load either from Firestore (if logged in) or local
   useEffect(() => {
     async function fetchData() {
       if (!currentUser) {
-        // Not logged in => load from local
         setLeitnerBoxes(loadFromLocal())
         setLoadingData(false)
         return
       }
-      // If logged in => try Firestore first
       const userDocRef = doc(db, 'users', currentUser.uid)
       const snap = await getDoc(userDocRef).catch(() => null)
 
@@ -42,12 +37,12 @@ function LightnerPage({ currentUser }) {
         const data = snap.data()
         setLeitnerBoxes(data.leitnerBoxes || {})
       } else {
-        // If doc not found in Firestore, create default
+        // create default if doc doesn't exist
         const init = {}
         words.forEach(word => {
           init[word.id] = 1
         })
-        await setDoc(userDocRef, { leitnerBoxes: init }).catch(() => {})
+        await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
         setLeitnerBoxes(init)
       }
       setLoadingData(false)
@@ -55,15 +50,14 @@ function LightnerPage({ currentUser }) {
     fetchData()
   }, [currentUser])
 
-  // Whenever leitnerBoxes changes, update localStorage and Firestore if logged in
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
-    // Always store locally
+    // local
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
-    // If logged in => merge to Firestore
+    // Firestore merge
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid)
       setDoc(userDocRef, { leitnerBoxes }, { merge: true }).catch(e =>
@@ -72,7 +66,6 @@ function LightnerPage({ currentUser }) {
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Count how many words are in each box
   const getCountForBox = (boxNumber) => {
     let count = 0
     for (let wordId in leitnerBoxes) {
@@ -83,7 +76,6 @@ function LightnerPage({ currentUser }) {
     return count
   }
 
-  // Figure out if a box is "due", "reviewed", or "empty"
   const getBoxStatus = (box, count) => {
     if (count === 0) return 'empty'
     const today = new Date()
@@ -92,33 +84,27 @@ function LightnerPage({ currentUser }) {
     return daysSinceReview >= box ? 'due' : 'reviewed'
   }
 
-  // Reset progress locally and in Firestore if logged in
   const handleReset = async () => {
-    // Initialize everyone to box 1
     const init = {}
     words.forEach(word => {
       init[word.id] = 1
     })
     setLeitnerBoxes(init)
 
-    // Clear last review dates
     boxes.forEach(box => {
       localStorage.removeItem(`lastReview_box_${box}`)
     })
-
-    // Store to local
     localStorage.setItem('leitnerBoxes', JSON.stringify(init))
 
-    // Also overwrite in Firestore if user is logged in
     if (currentUser) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid)
-        await setDoc(userDocRef, { leitnerBoxes: init })  // overwrites leitnerBoxes
+        // merge only overwrites leitnerBoxes, so firstName remains
+        await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
       } catch (err) {
         console.error('Failed to reset progress in Firestore:', err)
       }
     }
-
     setShowResetModal(false)
   }
 
@@ -163,7 +149,12 @@ function LightnerPage({ currentUser }) {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                d="M4 4v5h.582m15.356 
+                   2A8.001 8.001 0 004.582 
+                   9m0 0H9m11 
+                   11v-5h-.581m0 
+                   0a8.003 8.003 0 01-15.357-2m15.357 
+                   2H15"
               />
             </svg>
             Reset Progress
@@ -319,7 +310,8 @@ function LightnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      d="M12 8v4l3 3m6-3a9 9 0 
+                         11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
                 </div>
@@ -343,7 +335,15 @@ function LightnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                      d="M9 5H7a2 
+                         2 0 00-2 2v12a2 
+                         2 0 002 2h10a2 
+                         2 0 002-2V7a2 
+                         2 0 00-2-2h-2M9 
+                         5a2 2 0 002 2h2a2 
+                         2 0 002-2M9 
+                         5a2 2 0 012-2h2a2 
+                         2 0 012 2"
                     />
                   </svg>
                 </div>
@@ -396,7 +396,15 @@ function LightnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      d="M12 9v2m0 
+                         4h.01m-6.938 
+                         4h13.856c1.54 
+                         0 2.502-1.667 
+                         1.732-3L13.732 
+                         4c-.77-1.333-2.694-1.333-3.464 
+                         0L3.34 16c-.77 
+                         1.333.192 3 
+                         1.732 3z"
                     />
                   </svg>
                 </div>
@@ -415,7 +423,9 @@ function LightnerPage({ currentUser }) {
                 </button>
                 <button
                   onClick={handleReset}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-lg"
+                  className="flex-1 px-4 py-2.5 text-sm font-medium rounded-xl text-white bg-gradient-to-r 
+                             from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 transition-all duration-200 
+                             transform hover:-translate-y-0.5 hover:shadow-lg"
                 >
                   Yes, Reset Everything
                 </button>

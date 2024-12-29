@@ -15,7 +15,6 @@ function ReviewPage({ currentUser }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
 
-  // fallback for guests or if snapshot fails
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
@@ -26,7 +25,6 @@ function ReviewPage({ currentUser }) {
 
   useEffect(() => {
     if (!currentUser) {
-      // not logged in => load local
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
@@ -40,7 +38,7 @@ function ReviewPage({ currentUser }) {
         // doc not found => create default
         const init = {}
         words.forEach(w => { init[w.id] = 1 })
-        setDoc(ref, { leitnerBoxes: init })
+        setDoc(ref, { leitnerBoxes: init }, { merge: true })
         setLeitnerBoxes(init)
       }
       setLoadingData(false)
@@ -53,15 +51,12 @@ function ReviewPage({ currentUser }) {
     return () => unsub()
   }, [currentUser])
 
-  // Save to local + Firestore
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
-    // Save to local
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
-    // If logged in, save to Firestore
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })
@@ -69,7 +64,6 @@ function ReviewPage({ currentUser }) {
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Filter the words for this box
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
 
@@ -95,7 +89,6 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // If no words => box empty
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
@@ -103,7 +96,12 @@ function ReviewPage({ currentUser }) {
           <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100">
             <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-8 h-8 text-lime-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M5 13l4 4L19 7" 
+                />
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
@@ -136,14 +134,20 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // If user finished the session
   if (currentIndex >= sessionWords.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg className="w-8 h-8 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M9 12l2 2 4-4m6 
+                   2a9 9 0 11-18 0 
+                   9 9 0 0118 0z" 
+              />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -178,7 +182,6 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // Show current card
   const currentWordData = sessionWords[currentIndex]
   const currentCardNumber = currentIndex + 1
   const totalCards = sessionWords.length
@@ -225,9 +228,17 @@ function ReviewPage({ currentUser }) {
           <Card
             wordData={currentWordData}
             boxNumber={leitnerBoxes[currentWordData.id]}
-            moveToNextBox={moveToNextBox}
-            moveToBoxOne={moveToBoxOne}
-            goToNextCard={moveToNextCard}
+            moveToNextBox={wordId => {
+              setLeitnerBoxes(prev => {
+                const curBox = prev[wordId]
+                const nextBox = curBox < 5 ? curBox + 1 : 5
+                return { ...prev, [wordId]: nextBox }
+              })
+            }}
+            moveToBoxOne={wordId => {
+              setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+            }}
+            goToNextCard={() => setCurrentIndex(prev => prev + 1)}
           />
         </div>
       </div>

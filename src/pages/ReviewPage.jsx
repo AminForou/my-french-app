@@ -5,6 +5,7 @@ import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
+import LoadingState from '../components/LoadingState'
 
 function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
@@ -88,8 +89,8 @@ function ReviewPage({ currentUser }) {
 
   if (loadingData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading review data...</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
+        <LoadingState type="cards" />
       </div>
     )
   }

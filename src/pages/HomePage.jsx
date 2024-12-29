@@ -2,9 +2,34 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { wordSets } from '../data/words'
+import { Helmet } from 'react-helmet'
+
 
 function HomePage({ currentUser }) {
   return (
+    <>
+    <Helmet>
+      <title>Memoranta: Master French Words with Confidence</title>
+      <meta 
+        name="description" 
+        content="Learn and retain French vocabulary effectively using the proven Leitner system. Track your progress, master 1000+ essential words, and build confidence at your own pace."
+      />
+      
+      {/* OpenGraph Tags */}
+      <meta property="og:type" content="website" />
+      <meta property="og:title" content="Memoranta: Master French Words with Confidence" />
+      <meta property="og:description" content="Learn and retain French vocabulary effectively using the proven Leitner system. Track your progress, master 1000+ essential words, and build confidence at your own pace." />
+      <meta property="og:image" content="https://www.memoranta.com/assets/logo-5c9ad257.png" />
+      <meta property="og:url" content="https://memoranta.com" />
+      <meta property="og:site_name" content="Memoranta" />
+
+      {/* Twitter Card Tags */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="Memoranta: Master French Words with Confidence" />
+      <meta name="twitter:description" content="Learn and retain French vocabulary effectively using the proven Leitner system. Track your progress, master 1000+ essential words, and build confidence at your own pace." />
+      <meta name="twitter:image" content="https://www.memoranta.com/assets/logo-5c9ad257.png" />
+    </Helmet>
+
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-6xl mx-auto px-4 py-12 pt-32">
         {/* Hero Section */}
@@ -166,6 +191,7 @@ function HomePage({ currentUser }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

@@ -1,8 +1,18 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet'
 
 function AboutPage() {
   return (
+    <>
+    <Helmet>
+      <title>Memoranta: Our Journey to Better Language Learning</title>
+      <meta
+        name="description"
+        content="Discover how Memoranta combines Duolingo's consistency with the Leitner system to create an effective French vocabulary learning experience for language enthusiasts."
+      />
+    </Helmet>
+
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-4xl mx-auto px-4 py-24">
         {/* Title */}
@@ -87,6 +97,7 @@ function AboutPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

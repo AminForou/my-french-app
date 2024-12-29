@@ -1,5 +1,4 @@
 // src/pages/ReviewPage.jsx
-
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
@@ -9,8 +8,8 @@ import Card from '../components/Card'
 import LoadingState from '../components/LoadingState'
 import { wordSets } from '../data/words'
 
-// ADD THIS:
 import LanguageSelector from '../components/LanguageSelector'
+import CardStackSelector from '../components/CardStackSelector'
 
 function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
@@ -23,11 +22,16 @@ function ReviewPage({ currentUser }) {
   // NEW: local state for language mode (en, fa, both)
   const [languageMode, setLanguageMode] = useState('en')
 
+  // NEW: local state for session size (slider), default 15
+  const [sessionSize, setSessionSize] = useState(15)
+
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
     const init = {}
-    words.forEach(w => { init[w.id] = 1 })
+    words.forEach(w => {
+      init[w.id] = 1
+    })
     return init
   }
 
@@ -39,22 +43,28 @@ function ReviewPage({ currentUser }) {
     }
 
     const ref = doc(db, 'users', currentUser.uid)
-    const unsub = onSnapshot(ref, snapshot => {
-      if (snapshot.exists()) {
-        setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
-      } else {
-        // doc not found => create default
-        const init = {}
-        words.forEach(w => { init[w.id] = 1 })
-        setDoc(ref, { leitnerBoxes: init }, { merge: true })
-        setLeitnerBoxes(init)
+    const unsub = onSnapshot(
+      ref,
+      snapshot => {
+        if (snapshot.exists()) {
+          setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
+        } else {
+          // doc not found => create default
+          const init = {}
+          words.forEach(w => {
+            init[w.id] = 1
+          })
+          setDoc(ref, { leitnerBoxes: init }, { merge: true })
+          setLeitnerBoxes(init)
+        }
+        setLoadingData(false)
+      },
+      err => {
+        console.warn('onSnapshot error in ReviewPage, fallback local:', err)
+        setLeitnerBoxes(loadFromLocal())
+        setLoadingData(false)
       }
-      setLoadingData(false)
-    }, (err) => {
-      console.warn('onSnapshot error in ReviewPage, fallback local:', err)
-      setLeitnerBoxes(loadFromLocal())
-      setLoadingData(false)
-    })
+    )
 
     return () => unsub()
   }, [currentUser])
@@ -67,30 +77,42 @@ function ReviewPage({ currentUser }) {
 
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
-      setDoc(ref, { leitnerBoxes }, { merge: true })
-        .catch(e => console.error('Saving to Firestore failed:', e))
+      setDoc(ref, { leitnerBoxes }, { merge: true }).catch(e =>
+        console.error('Saving to Firestore failed:', e)
+      )
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
-  const sessionWords = boxWords.slice(0, 10)
+  // Grab words belonging to this box
+  const boxWords = words.filter(w => leitnerBoxes[w.id] === boxNumber)
 
-  const moveToNextCard = () => setCurrentIndex((prev) => prev + 1)
+  // Max possible session size: either 40 or however many words are in the box, whichever is smaller
+  const maxSessionPossible = Math.min(40, boxWords.length)
 
-  const moveToNextBox = (wordId) => {
-    setLeitnerBoxes((prev) => {
+  // The actual words for this session: slice up to sessionSize
+  const sessionWords = boxWords.slice(0, sessionSize)
+
+  // If the user changes the slider, update sessionSize
+  const handleSessionSizeChange = (e) => {
+    setSessionSize(parseInt(e.target.value, 10))
+  }
+
+  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
+
+  const moveToNextBox = wordId => {
+    setLeitnerBoxes(prev => {
       const currentBox = prev[wordId]
       const nextBox = currentBox < 5 ? currentBox + 1 : 5
       return { ...prev, [wordId]: nextBox }
     })
   }
 
-  const moveToBoxOne = (wordId) => {
-    setLeitnerBoxes((prev) => ({ ...prev, [wordId]: 1 }))
+  const moveToBoxOne = wordId => {
+    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
   }
 
   // Handler from LanguageSelector
-  const handleLanguageChange = (mode) => {
+  const handleLanguageChange = mode => {
     setLanguageMode(mode)
   }
 
@@ -102,17 +124,25 @@ function ReviewPage({ currentUser }) {
     )
   }
 
+  // If no words in box, user sees "Box is Empty"
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100">
             <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-lime-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg
+                className="w-8 h-8 text-lime-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              Box {boxNumber} is Empty
+            </h2>
             <p className="text-gray-600 mb-8">
               Great job! You've completed all the words in this box for now. Come back later or try another box.
             </p>
@@ -142,18 +172,24 @@ function ReviewPage({ currentUser }) {
     )
   }
 
+  // If user finished all sessionWords
   if (currentIndex >= sessionWords.length) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
+            <svg
+              className="w-8 h-8 text-lime-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
                 d="M9 12l2 2 4-4m6 2a9 9 0 
-                   11-18 0 9 9 0 0118 0z" 
+                   11-18 0 9 9 0 0118 0z"
               />
             </svg>
           </div>
@@ -189,6 +225,7 @@ function ReviewPage({ currentUser }) {
     )
   }
 
+  // We have some words left to review
   const currentWordData = sessionWords[currentIndex]
   const currentCardNumber = currentIndex + 1
   const totalCards = sessionWords.length
@@ -199,24 +236,34 @@ function ReviewPage({ currentUser }) {
       <div className="max-w-4xl mx-auto pb-32 sm:pb-32 pb-16">
         {/* Box Info */}
         <div className="text-center mb-4 sm:mb-8">
-          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1.5 
-                          shadow-sm border border-gray-100 mb-2 sm:mb-4"
+          <div
+            className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1.5 
+                       shadow-sm border border-gray-100 mb-2 sm:mb-4"
           >
             {wordSets.french.icon()}
-            <span className="text-sm font-medium text-gray-700">{wordSets.french.name}</span>
+            <span className="text-sm font-medium text-gray-700">
+              {wordSets.french.name}
+            </span>
           </div>
         </div>
 
         {/* Session Header */}
         <div className="text-center mb-8 sm:mb-8 mb-4">
-          <div className="hidden sm:inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
-                          shadow-sm border border-gray-100 mb-4 sm:mb-4 mb-2"
+          <div
+            className="hidden sm:inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                       shadow-sm border border-gray-100 mb-4 sm:mb-4 mb-2"
           >
             <span className="text-sm font-medium text-gray-600">Box</span>
-            <span className="text-sm font-bold text-blue-600">{boxNumber}</span>
+            <span className="text-sm font-bold text-blue-600">
+              {boxNumber}
+            </span>
           </div>
-          <h1 className="text-3xl sm:text-3xl text-2xl font-bold text-gray-900 mb-2">Review Session</h1>
-          <p className="text-gray-600 text-sm sm:text-base">Swipe right if you know it, left if you need more practice</p>
+          <h1 className="text-3xl sm:text-3xl text-2xl font-bold text-gray-900 mb-2">
+            Review Session
+          </h1>
+          <p className="text-gray-600 text-sm sm:text-base">
+            Swipe right if you know it, left if you need more practice
+          </p>
         </div>
 
         {/* Progress Bar */}
@@ -252,11 +299,16 @@ function ReviewPage({ currentUser }) {
           />
         </div>
 
-        {/* Language Selector */}
-        <LanguageSelector 
-          onChange={handleLanguageChange} 
-          value={languageMode}
-        />
+        {/* Controls section */}
+        <div className="mt-8 space-y-8">
+          <LanguageSelector onChange={handleLanguageChange} value={languageMode} />
+          
+          <CardStackSelector
+            value={sessionSize}
+            onChange={(e) => setSessionSize(parseInt(e.target.value, 10))}
+            max={maxSessionPossible}
+          />
+        </div>
       </div>
     </div>
   )

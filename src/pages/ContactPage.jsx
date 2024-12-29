@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Helmet } from 'react-helmet'
 
 function ContactPage() {
   const [formData, setFormData] = useState({
@@ -52,6 +53,17 @@ function ContactPage() {
   }
 
   return (
+
+    <>
+    <Helmet>
+      <title>Connect With Memoranta and Share Your Feedback</title>
+      <meta
+        name="description"
+        content="Have questions or suggestions about learning French with Memoranta? Get in touch with our team. We value your feedback and are here to support your learning journey."
+      />
+    </Helmet>
+
+
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-4xl mx-auto px-4 py-24">
         {/* Header */}
@@ -229,6 +241,7 @@ function ContactPage() {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

@@ -17,43 +17,29 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
-    console.log('[LOG] Subscribing to onAuthStateChanged...') // [LOG]
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log('[LOG] User is signed in:', user.uid) // [LOG]
-      } else {
-        console.log('[LOG] No user is signed in.') // [LOG]
-      }
       setCurrentUser(user || null)
       setAuthLoading(false)
     })
-    return () => {
-      console.log('[LOG] Unsubscribing onAuthStateChanged...') // [LOG]
-      unsubscribe()
-    }
+    return () => unsubscribe()
   }, [])
 
   const handleSignOut = async () => {
-    console.log('[LOG] User requesting sign out...') // [LOG]
     try {
       await signOut(auth)
       setCurrentUser(null)
-      console.log('[LOG] Sign out successful!') // [LOG]
     } catch (err) {
       console.error('Sign out error:', err)
     }
   }
 
   if (authLoading) {
-    console.log('[LOG] Auth is loading; showing spinner...') // [LOG]
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading...</p>
       </div>
     )
   }
-
-  console.log('[LOG] Rendering main App with currentUser:', currentUser?.uid) // [LOG]
 
   return (
     <div className="flex flex-col min-h-screen">

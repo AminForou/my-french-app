@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore' // [UPDATED]
+import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -13,15 +13,12 @@ function ReviewPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
+  const [error, setError] = useState(null)
 
+  // fallback for guests or if snapshot fails
   function loadFromLocal() {
-    console.log('[LOG] Loading from localStorage...')
     const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) {
-      console.log('[LOG] Found localStorage data!')
-      return JSON.parse(stored)
-    }
-    console.log('[LOG] No localStorage data found; building default...')
+    if (stored) return JSON.parse(stored)
     const init = {}
     words.forEach(w => { init[w.id] = 1 })
     return init
@@ -29,89 +26,142 @@ function ReviewPage({ currentUser }) {
 
   useEffect(() => {
     if (!currentUser) {
-      console.log('[LOG] No currentUser; using localStorage for progress')
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
     }
 
-    console.log('[LOG] Attempting to read Firestore doc for user:', currentUser.uid)
     const ref = doc(db, 'users', currentUser.uid)
-    const unsub = onSnapshot(ref,
-      snapshot => {
-        if (snapshot.exists()) {
-          console.log('[LOG] Firestore doc found! Data:', snapshot.data())
-          setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
-        } else {
-          console.log('[LOG] Firestore doc does NOT exist; creating default...')
-          const init = {}
-          words.forEach(w => { init[w.id] = 1 })
-          setDoc(ref, { leitnerBoxes: init })
-            .then(() => console.log('[LOG] Default doc created in Firestore!'))
-            .catch(err => console.error('Error creating default doc:', err))
+    const unsub = onSnapshot(ref, snapshot => {
+      if (snapshot.exists()) {
+        const data = snapshot.data()
+        setLeitnerBoxes(data.leitnerBoxes || {})
+        setLoadingData(false)
+      } else {
+        // Initialize user document if it doesn't exist
+        const init = {}
+        words.forEach(w => { init[w.id] = 1 })
+        setDoc(ref, { 
+          leitnerBoxes: init,
+          lastReviewDates: {},
+          createdAt: new Date().toISOString()
+        })
+        .then(() => {
           setLeitnerBoxes(init)
-        }
-        setLoadingData(false)
-      },
-      err => {
-        console.warn('[LOG] onSnapshot error, falling back to local storage:', err)
-        setLeitnerBoxes(loadFromLocal())
-        setLoadingData(false)
+          setLoadingData(false)
+        })
+        .catch(err => {
+          console.error('Error creating user document:', err)
+          setError('Failed to initialize user data')
+          setLoadingData(false)
+        })
       }
-    )
+    }, (err) => {
+      console.error('Firestore subscription error:', err)
+      setError('Failed to load data')
+      setLeitnerBoxes(loadFromLocal())
+      setLoadingData(false)
+    })
 
-    return () => {
-      console.log('[LOG] Unsubscribing from onSnapshot for user:', currentUser.uid)
-      unsub()
-    }
+    return () => unsub()
   }, [currentUser])
 
+  // Save to local + Firestore
   useEffect(() => {
-    if (loadingData) return
-    if (!Object.keys(leitnerBoxes).length) return
+    if (loadingData || !Object.keys(leitnerBoxes).length) return
 
-    console.log('[LOG] Storing leitnerBoxes to localStorage...')
+    // Always save to local storage as fallback
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
+    // Save to Firestore if logged in
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
-      console.log('[LOG] Saving leitnerBoxes to Firestore for user:', currentUser.uid)
-      setDoc(ref, { leitnerBoxes }, { merge: true })
-        .then(async () => {
-          console.log('[LOG] Successfully saved to Firestore! Now verifying via getDoc...')
-          const snap = await getDoc(ref)
-          if (snap.exists()) {
-            console.log('[LOG] getDoc after setDoc => doc data:', snap.data())
-          } else {
-            console.warn('[LOG] getDoc after setDoc => doc does NOT exist?!')
-          }
-        })
-        .catch(e => console.error('Saving to Firestore failed:', e))
+      updateDoc(ref, {
+        leitnerBoxes,
+        lastUpdated: new Date().toISOString()
+      })
+      .catch(err => {
+        console.error('Failed to save to Firestore:', err)
+        setError('Failed to save progress')
+      })
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Filter words for this box
+  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
+
+  const moveToNextBox = async (wordId) => {
+    if (!currentUser) {
+      setLeitnerBoxes(prev => {
+        const currentBox = prev[wordId]
+        const nextBox = currentBox < 5 ? currentBox + 1 : 5
+        return { ...prev, [wordId]: nextBox }
+      })
+      return
+    }
+
+    try {
+      const ref = doc(db, 'users', currentUser.uid)
+      const nextBox = leitnerBoxes[wordId] < 5 ? leitnerBoxes[wordId] + 1 : 5
+      
+      await updateDoc(ref, {
+        [`leitnerBoxes.${wordId}`]: nextBox,
+        [`lastReviewDates.box${nextBox}`]: new Date().toISOString()
+      })
+
+      setLeitnerBoxes(prev => ({
+        ...prev,
+        [wordId]: nextBox
+      }))
+    } catch (err) {
+      console.error('Failed to update box:', err)
+      setError('Failed to save progress')
+    }
+  }
+
+  const moveToBoxOne = async (wordId) => {
+    if (!currentUser) {
+      setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+      return
+    }
+
+    try {
+      const ref = doc(db, 'users', currentUser.uid)
+      await updateDoc(ref, {
+        [`leitnerBoxes.${wordId}`]: 1,
+        [`lastReviewDates.box1`]: new Date().toISOString()
+      })
+
+      setLeitnerBoxes(prev => ({
+        ...prev,
+        [wordId]: 1
+      }))
+    } catch (err) {
+      console.error('Failed to move to box 1:', err)
+      setError('Failed to save progress')
+    }
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Filter the words for this box
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
 
-  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
-
-  const moveToNextBox = (wordId) => {
-    console.log(`[LOG] Moving wordId ${wordId} up a box...`)
-    setLeitnerBoxes(prev => {
-      const currentBox = prev[wordId]
-      const nextBox = currentBox < 5 ? currentBox + 1 : 5
-      return { ...prev, [wordId]: nextBox }
-    })
-  }
-
-  const moveToBoxOne = (wordId) => {
-    console.log(`[LOG] Resetting wordId ${wordId} to box 1...`)
-    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
-  }
-
   if (loadingData) {
-    console.log('[LOG] Still loadingData in ReviewPage; returning loader...')
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading review data...</p>
@@ -213,9 +263,8 @@ function ReviewPage({ currentUser }) {
       <div className="max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
-                       shadow-sm border border-gray-100 mb-4"
+          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                          shadow-sm border border-gray-100 mb-4"
           >
             <span className="text-sm font-medium text-gray-600">Box</span>
             <span className="text-sm font-bold text-blue-600">{boxNumber}</span>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { words } from '../data/words'
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore' // [UPDATED]
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 
 function LightnerPage({ currentUser }) {
@@ -10,16 +10,13 @@ function LightnerPage({ currentUser }) {
   const [showResetModal, setShowResetModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
 
+  // We have 5 boxes in our Leitner system
   const boxes = [1, 2, 3, 4, 5]
 
+  // local fallback load
   function loadFromLocal() {
-    console.log('[LOG] loadFromLocal() called in LightnerPage')
     const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) {
-      console.log('[LOG] Found data in localStorage')
-      return JSON.parse(stored)
-    }
-    console.log('[LOG] No data in localStorage; creating default...')
+    if (stored) return JSON.parse(stored)
     const init = {}
     words.forEach(word => {
       init[word.id] = 1
@@ -27,80 +24,59 @@ function LightnerPage({ currentUser }) {
     return init
   }
 
+  // On component mount, load data
   useEffect(() => {
     if (!currentUser) {
-      console.log('[LOG] No currentUser => fallback to localStorage in LightnerPage')
+      // not logged in => local fallback
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
     }
 
-    console.log('[LOG] Attempting Firestore read for user:', currentUser.uid)
+    // logged in => read from Firestore
     const userDoc = doc(db, 'users', currentUser.uid)
     const unsub = onSnapshot(
       userDoc,
       snapshot => {
         if (snapshot.exists()) {
-          console.log('[LOG] Firestore doc found:', snapshot.data())
           setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
         } else {
-          console.log('[LOG] Doc not found; creating default doc for user:', currentUser.uid)
+          // doc not found => create default in Firestore
           const init = {}
           words.forEach(word => {
             init[word.id] = 1
           })
           setDoc(userDoc, { leitnerBoxes: init })
-            .then(() => console.log('[LOG] Default doc created in Firestore for user:', currentUser.uid))
-            .catch(err => console.error('Error creating default user doc:', err))
           setLeitnerBoxes(init)
         }
         setLoadingData(false)
       },
       err => {
-        console.warn('[LOG] onSnapshot error in LightnerPage, fallback local:', err)
+        console.warn('onSnapshot error in LightnerPage, fallback local:', err)
         setLeitnerBoxes(loadFromLocal())
         setLoadingData(false)
       }
     )
 
-    return () => {
-      console.log('[LOG] Unsubscribing from LightnerPage onSnapshot for user:', currentUser.uid)
-      unsub()
-    }
+    return () => unsub()
   }, [currentUser])
 
-  // Whenever leitnerBoxes changes, store locally and attempt Firestore
+  // Save to local + Firestore whenever leitnerBoxes changes
   useEffect(() => {
-    if (loadingData) {
-      console.log('[LOG] Currently loadingData in LightnerPage, skip saving...')
-      return
-    }
-    if (!Object.keys(leitnerBoxes).length) {
-      console.log('[LOG] leitnerBoxes is empty, skip saving...')
-      return
-    }
+    if (loadingData) return
+    if (!Object.keys(leitnerBoxes).length) return
 
-    console.log('[LOG] Saving leitnerBoxes to localStorage in LightnerPage')
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
     if (currentUser) {
-      console.log('[LOG] Attempting to save leitnerBoxes to Firestore for user:', currentUser.uid)
       const userDoc = doc(db, 'users', currentUser.uid)
-      setDoc(userDoc, { leitnerBoxes }, { merge: true })
-        .then(async () => {
-          console.log('[LOG] Successfully saved to Firestore in LightnerPage! Now verifying via getDoc...')
-          const snap = await getDoc(userDoc)
-          if (snap.exists()) {
-            console.log('[LOG] getDoc after setDoc => doc data:', snap.data())
-          } else {
-            console.warn('[LOG] getDoc after setDoc => doc does NOT exist?!')
-          }
-        })
-        .catch(e => console.error('Saving to Firestore failed:', e))
+      setDoc(userDoc, { leitnerBoxes }, { merge: true }).catch(e =>
+        console.error('Saving to Firestore failed:', e)
+      )
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Count how many words are in each box
+  // 3) Count how many words are in each box
   const getCountForBox = (boxNumber) => {
     let count = 0
     for (let wordId in leitnerBoxes) {
@@ -121,42 +97,33 @@ function LightnerPage({ currentUser }) {
   }
 
   const handleReset = () => {
-    console.log('[LOG] handleReset() triggered in LightnerPage')
+    // Initialize everyone to box 1
     const init = {}
     words.forEach(word => {
       init[word.id] = 1
     })
     setLeitnerBoxes(init)
 
-    // Clear last review dates
+    // Clear all last review dates
     boxes.forEach(box => {
       localStorage.removeItem(`lastReview_box_${box}`)
     })
 
+    // Save to localStorage
     localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-    console.log('[LOG] Reset localStorage and set everything to box 1')
 
+    // If logged in, overwrite Firestore as well
     if (currentUser) {
       const userDoc = doc(db, 'users', currentUser.uid)
-      console.log('[LOG] Attempting to reset Firestore doc as well...')
-      setDoc(userDoc, { leitnerBoxes: init })
-        .then(async () => {
-          console.log('[LOG] Firestore doc reset success! Now verifying via getDoc...')
-          const snap = await getDoc(userDoc)
-          if (snap.exists()) {
-            console.log('[LOG] getDoc after reset => doc data:', snap.data())
-          } else {
-            console.warn('[LOG] getDoc after reset => doc does NOT exist?!')
-          }
-        })
-        .catch(e => console.error('Reset progress save failed:', e))
+      setDoc(userDoc, { leitnerBoxes: init }).catch(e =>
+        console.error('Reset progress save failed:', e)
+      )
     }
 
     setShowResetModal(false)
   }
 
   if (loadingData) {
-    console.log('[LOG] loadingData is true in LightnerPage, returning loader...')
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading your progress...</p>

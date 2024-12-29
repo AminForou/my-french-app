@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -13,7 +13,6 @@ function ReviewPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
-  const [error, setError] = useState(null)
 
   // fallback for guests or if snapshot fails
   function loadFromLocal() {
@@ -26,6 +25,7 @@ function ReviewPage({ currentUser }) {
 
   useEffect(() => {
     if (!currentUser) {
+      // not logged in => load local
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
@@ -34,31 +34,17 @@ function ReviewPage({ currentUser }) {
     const ref = doc(db, 'users', currentUser.uid)
     const unsub = onSnapshot(ref, snapshot => {
       if (snapshot.exists()) {
-        const data = snapshot.data()
-        setLeitnerBoxes(data.leitnerBoxes || {})
-        setLoadingData(false)
+        setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
       } else {
-        // Initialize user document if it doesn't exist
+        // doc not found => create default
         const init = {}
         words.forEach(w => { init[w.id] = 1 })
-        setDoc(ref, { 
-          leitnerBoxes: init,
-          lastReviewDates: {},
-          createdAt: new Date().toISOString()
-        })
-        .then(() => {
-          setLeitnerBoxes(init)
-          setLoadingData(false)
-        })
-        .catch(err => {
-          console.error('Error creating user document:', err)
-          setError('Failed to initialize user data')
-          setLoadingData(false)
-        })
+        setDoc(ref, { leitnerBoxes: init })
+        setLeitnerBoxes(init)
       }
+      setLoadingData(false)
     }, (err) => {
-      console.error('Firestore subscription error:', err)
-      setError('Failed to load data')
+      console.warn('onSnapshot error in ReviewPage, fallback local:', err)
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
     })
@@ -68,98 +54,37 @@ function ReviewPage({ currentUser }) {
 
   // Save to local + Firestore
   useEffect(() => {
-    if (loadingData || !Object.keys(leitnerBoxes).length) return
+    if (loadingData) return
+    if (!Object.keys(leitnerBoxes).length) return
 
-    // Always save to local storage as fallback
+    // Save to local
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
-    // Save to Firestore if logged in
+    // If logged in, save to Firestore
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
-      updateDoc(ref, {
-        leitnerBoxes,
-        lastUpdated: new Date().toISOString()
-      })
-      .catch(err => {
-        console.error('Failed to save to Firestore:', err)
-        setError('Failed to save progress')
-      })
+      setDoc(ref, { leitnerBoxes }, { merge: true })
+        .catch(e => console.error('Saving to Firestore failed:', e))
     }
   }, [leitnerBoxes, currentUser, loadingData])
-
-  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
-
-  const moveToNextBox = async (wordId) => {
-    if (!currentUser) {
-      setLeitnerBoxes(prev => {
-        const currentBox = prev[wordId]
-        const nextBox = currentBox < 5 ? currentBox + 1 : 5
-        return { ...prev, [wordId]: nextBox }
-      })
-      return
-    }
-
-    try {
-      const ref = doc(db, 'users', currentUser.uid)
-      const nextBox = leitnerBoxes[wordId] < 5 ? leitnerBoxes[wordId] + 1 : 5
-      
-      await updateDoc(ref, {
-        [`leitnerBoxes.${wordId}`]: nextBox,
-        [`lastReviewDates.box${nextBox}`]: new Date().toISOString()
-      })
-
-      setLeitnerBoxes(prev => ({
-        ...prev,
-        [wordId]: nextBox
-      }))
-    } catch (err) {
-      console.error('Failed to update box:', err)
-      setError('Failed to save progress')
-    }
-  }
-
-  const moveToBoxOne = async (wordId) => {
-    if (!currentUser) {
-      setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
-      return
-    }
-
-    try {
-      const ref = doc(db, 'users', currentUser.uid)
-      await updateDoc(ref, {
-        [`leitnerBoxes.${wordId}`]: 1,
-        [`lastReviewDates.box1`]: new Date().toISOString()
-      })
-
-      setLeitnerBoxes(prev => ({
-        ...prev,
-        [wordId]: 1
-      }))
-    } catch (err) {
-      console.error('Failed to move to box 1:', err)
-      setError('Failed to save progress')
-    }
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   // Filter the words for this box
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
+
+  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
+
+  const moveToNextBox = (wordId) => {
+    setLeitnerBoxes(prev => {
+      const currentBox = prev[wordId]
+      const nextBox = currentBox < 5 ? currentBox + 1 : 5
+      return { ...prev, [wordId]: nextBox }
+    })
+  }
+
+  const moveToBoxOne = (wordId) => {
+    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+  }
 
   if (loadingData) {
     return (

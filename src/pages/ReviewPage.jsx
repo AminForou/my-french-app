@@ -1,4 +1,5 @@
 // src/pages/ReviewPage.jsx
+
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { doc, onSnapshot, setDoc } from 'firebase/firestore'
@@ -8,6 +9,9 @@ import Card from '../components/Card'
 import LoadingState from '../components/LoadingState'
 import { wordSets } from '../data/words'
 
+// ADD THIS:
+import LanguageSelector from '../components/LanguageSelector'
+
 function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
   const boxNumber = parseInt(boxId, 10) || 1
@@ -15,6 +19,9 @@ function ReviewPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
+
+  // NEW: local state for language mode (en, fa, both)
+  const [languageMode, setLanguageMode] = useState('en')
 
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
@@ -68,10 +75,10 @@ function ReviewPage({ currentUser }) {
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
 
-  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
+  const moveToNextCard = () => setCurrentIndex((prev) => prev + 1)
 
   const moveToNextBox = (wordId) => {
-    setLeitnerBoxes(prev => {
+    setLeitnerBoxes((prev) => {
       const currentBox = prev[wordId]
       const nextBox = currentBox < 5 ? currentBox + 1 : 5
       return { ...prev, [wordId]: nextBox }
@@ -79,7 +86,12 @@ function ReviewPage({ currentUser }) {
   }
 
   const moveToBoxOne = (wordId) => {
-    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+    setLeitnerBoxes((prev) => ({ ...prev, [wordId]: 1 }))
+  }
+
+  // Handler from LanguageSelector
+  const handleLanguageChange = (mode) => {
+    setLanguageMode(mode)
   }
 
   if (loadingData) {
@@ -97,12 +109,7 @@ function ReviewPage({ currentUser }) {
           <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100">
             <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-8 h-8 text-lime-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M5 13l4 4L19 7" 
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
@@ -145,9 +152,8 @@ function ReviewPage({ currentUser }) {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M9 12l2 2 4-4m6 
-                   2a9 9 0 11-18 0 
-                   9 9 0 0118 0z" 
+                d="M9 12l2 2 4-4m6 2a9 9 0 
+                   11-18 0 9 9 0 0118 0z" 
               />
             </svg>
           </div>
@@ -189,31 +195,32 @@ function ReviewPage({ currentUser }) {
   const progressPercentage = (currentCardNumber / totalCards) * 100
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
-      <div className="max-w-4xl mx-auto pb-32">
-        <div className="text-center mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4 sm:pt-32 pt-24">
+      <div className="max-w-4xl mx-auto pb-32 sm:pb-32 pb-16">
+        {/* Box Info */}
+        <div className="text-center mb-4 sm:mb-8">
           <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1.5 
-                          shadow-sm border border-gray-100 mb-4"
+                          shadow-sm border border-gray-100 mb-2 sm:mb-4"
           >
             {wordSets.french.icon()}
             <span className="text-sm font-medium text-gray-700">{wordSets.french.name}</span>
           </div>
         </div>
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
-                          shadow-sm border border-gray-100 mb-4"
+        {/* Session Header */}
+        <div className="text-center mb-8 sm:mb-8 mb-4">
+          <div className="hidden sm:inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                          shadow-sm border border-gray-100 mb-4 sm:mb-4 mb-2"
           >
             <span className="text-sm font-medium text-gray-600">Box</span>
             <span className="text-sm font-bold text-blue-600">{boxNumber}</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Review Session</h1>
-          <p className="text-gray-600">Swipe right if you know it, left if you need more practice</p>
+          <h1 className="text-3xl sm:text-3xl text-2xl font-bold text-gray-900 mb-2">Review Session</h1>
+          <p className="text-gray-600 text-sm sm:text-base">Swipe right if you know it, left if you need more practice</p>
         </div>
 
         {/* Progress Bar */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-8">
+        <div className="bg-white rounded-2xl p-6 sm:p-6 p-4 shadow-lg border border-gray-100 mb-8 sm:mb-8 mb-4">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-600">Progress</span>
             <span className="text-sm font-bold text-gray-900">
@@ -232,25 +239,24 @@ function ReviewPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Card */}
-        <div className="relative">
+        {/* Card Container */}
+        <div className="relative px-0 sm:px-4">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white to-transparent pointer-events-none" />
           <Card
             wordData={currentWordData}
             boxNumber={leitnerBoxes[currentWordData.id]}
-            moveToNextBox={wordId => {
-              setLeitnerBoxes(prev => {
-                const curBox = prev[wordId]
-                const nextBox = curBox < 5 ? curBox + 1 : 5
-                return { ...prev, [wordId]: nextBox }
-              })
-            }}
-            moveToBoxOne={wordId => {
-              setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
-            }}
-            goToNextCard={() => setCurrentIndex(prev => prev + 1)}
+            moveToNextBox={moveToNextBox}
+            moveToBoxOne={moveToBoxOne}
+            goToNextCard={moveToNextCard}
+            languageMode={languageMode}
           />
         </div>
+
+        {/* Language Selector */}
+        <LanguageSelector 
+          onChange={handleLanguageChange} 
+          value={languageMode}
+        />
       </div>
     </div>
   )

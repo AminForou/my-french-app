@@ -320,13 +320,6 @@ export const wordSets = {
   // Future language sets can be added here
 }
 
-// Update the Card component display format
-export const formatWordData = (word) => ({
-  ...word,
-  meaning: `${word.meaning.en} - ${word.meaning.fa}`,
-  example: `${word.example.fr}\n${word.example.en} - ${word.example.fa}`
-})
-
-// For backward compatibility
-export const words = wordSets.french.words.map(formatWordData)
+// Export the raw words directly
+export const words = wordSets.french.words
   

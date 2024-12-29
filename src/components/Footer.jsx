@@ -6,7 +6,7 @@ function Footer() {
           {/* Logo and Copyright */}
           <div className="flex items-center gap-2">
             <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-lime-600 text-transparent bg-clip-text">
-              Leitner
+              Memoranta
             </span>
             <span className="text-sm text-gray-500">
               © {new Date().getFullYear()} All rights reserved
@@ -15,6 +15,17 @@ function Footer() {
 
           {/* Links */}
           <div className="flex items-center gap-6">
+            <a 
+              href="https://x.com/aminfseo" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-gray-500 hover:text-gray-700 transition-colors duration-200"
+            >
+              <span className="sr-only">X (Twitter)</span>
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+            </a>
             <a 
               href="https://www.linkedin.com/in/ma-foroutan/" 
               target="_blank" 
@@ -43,7 +54,7 @@ function Footer() {
           <p className="text-sm text-gray-500">
             Built with 
             <span className="mx-1 bg-gradient-to-r from-blue-600 to-lime-600 text-transparent bg-clip-text">❤</span>
-            for French learners
+            for curious minds
           </p>
         </div>
       </div>

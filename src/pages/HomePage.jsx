@@ -1,6 +1,7 @@
 // src/pages/HomePage.js
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { wordSets } from '../data/words'
 
 function HomePage({ currentUser }) {
   return (
@@ -37,7 +38,7 @@ function HomePage({ currentUser }) {
             /* Logged in => Show normal "Start Learning" and "Quick Review" */
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
               <Link
-                to="/lightner"
+                to="/progress"
                 className="inline-flex items-center justify-center px-8 py-4 text-lg font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               >
                 Start Learning
@@ -88,13 +89,41 @@ function HomePage({ currentUser }) {
           </div>
         </div>
 
+        {/* New section highlighting the current offering */}
+        <div className="bg-blue-50/50 rounded-3xl p-8 md:p-12 mb-16">
+          <div className="max-w-3xl mx-auto text-center">
+            <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1.5 
+                            shadow-sm border border-gray-100 mb-6">
+              {wordSets.french.icon()}
+              <span className="text-sm font-medium text-gray-700">Currently Available</span>
+            </div>
+            
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+              Start with 1,000 Essential French Words
+            </h2>
+            
+            <p className="text-gray-600 mb-8 leading-relaxed">
+              We're starting with the most frequently used French vocabulary to help you build a strong foundation. 
+              Based on user demand, we plan to expand with more languages and advanced features.
+            </p>
+            
+            <div className="inline-flex items-center justify-center gap-2 text-sm text-gray-500">
+              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span>More languages and features coming soon!</span>
+            </div>
+          </div>
+        </div>
+
         {/* Stats Section with Animation */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-16">
           {[
+            { number: '1000+', label: 'French Words' },
             { number: '5', label: 'Learning Boxes' },
-            { number: '24/7', label: 'Available' },
             { number: '100%', label: 'Free' },
-            { number: '∞', label: 'Potential' },
+            { number: '24/7', label: 'Available' },
           ].map((stat, index) => (
             <div key={index} className="text-center transform transition-all duration-300 hover:-translate-y-1">
               <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-lime-600 text-transparent bg-clip-text mb-2">
@@ -121,7 +150,7 @@ function HomePage({ currentUser }) {
           ) : (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/lightner"
+                to="/progress"
                 className="inline-flex items-center justify-center px-8 py-3 text-base font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               >
                 Get Started Now

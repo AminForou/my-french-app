@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import ReviewPage from './pages/ReviewPage'
-import LightnerPage from './pages/LightnerPage'
+import LeitnerPage from './pages/LeitnerPage'
 import LoginPage from './pages/LoginPage'
 import Navbar from './components/Navbar'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -11,6 +11,8 @@ import './App.css'
 import Footer from './components/Footer'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
+import AboutPage from './pages/AboutPage'
+import ContactPage from './pages/ContactPage'
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -49,13 +51,15 @@ function App() {
           {/* Public Routes */}
           <Route path="/" element={<HomePage currentUser={currentUser} />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
 
           {/* Protected Routes */}
           <Route
-            path="/lightner"
+            path="/progress"
             element={
               <ProtectedRoute user={currentUser}>
-                <LightnerPage currentUser={currentUser} />
+                <LeitnerPage currentUser={currentUser} />
               </ProtectedRoute>
             }
           />

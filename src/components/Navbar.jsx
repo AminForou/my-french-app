@@ -1,6 +1,7 @@
 // src/components/Navbar.jsx
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import logo from '../assets/logo.png'
 
 function Navbar({ currentUser, onSignOut }) {
   const location = useLocation()
@@ -39,33 +40,46 @@ function Navbar({ currentUser, onSignOut }) {
             <Link to="/" className="flex items-center group" aria-label="Home">
               <div className="relative">
                 <div className="absolute -inset-2 bg-blue-100 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10"></div>
-                <svg
-                  className="w-8 h-8 text-blue-600 transform transition-transform group-hover:scale-110"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                  />
-                </svg>
+                <img
+                  src={logo}
+                  alt="Memoranta Logo"
+                  className="w-8 h-8 transform transition-transform group-hover:scale-110"
+                />
               </div>
-              <span className="ml-2 text-xl font-bold text-gray-900">Leitner</span>
+              <span className="ml-2 text-xl font-bold text-gray-900">Memoranta</span>
             </Link>
           </div>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-3">
+            <Link
+              to="/about"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+                isActive('/about')
+                  ? 'text-blue-700'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              About
+            </Link>
+            <Link
+              to="/contact"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
+                isActive('/contact')
+                  ? 'text-blue-700'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Contact
+            </Link>
+            
             {/* If user is logged in => show "View Progress", "Review Words", "Sign Out" */}
             {currentUser ? (
               <>
                 <Link
-                  to="/lightner"
+                  to="/progress"
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 relative group ${
-                    isActive('/lightner')
+                    isActive('/progress')
                       ? 'text-blue-700'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
@@ -135,14 +149,37 @@ function Navbar({ currentUser, onSignOut }) {
         }`}
       >
         <div className="px-2 pt-2 pb-3 space-y-1 bg-white/95 backdrop-blur-sm shadow-lg">
+          <Link
+            to="/about"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-lg text-base font-medium ${
+              isActive('/about')
+                ? 'bg-blue-50 text-blue-700'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            About
+          </Link>
+          <Link
+            to="/contact"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`block px-3 py-2 rounded-lg text-base font-medium ${
+              isActive('/contact')
+                ? 'bg-blue-50 text-blue-700'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            Contact
+          </Link>
+          
           {/* If user is logged in => show "View Progress", "Review Words", "Sign Out" */}
           {currentUser ? (
             <>
               <Link
-                to="/lightner"
+                to="/progress"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`block px-3 py-2 rounded-lg text-base font-medium ${
-                  isActive('/lightner')
+                  isActive('/progress')
                     ? 'bg-blue-50 text-blue-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}

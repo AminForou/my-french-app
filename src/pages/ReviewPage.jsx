@@ -6,6 +6,7 @@ import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
 import LoadingState from '../components/LoadingState'
+import { wordSets } from '../data/words'
 
 function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
@@ -110,7 +111,7 @@ function ReviewPage({ currentUser }) {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/lightner"
+                to="/progress"
                 className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
                            text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
                            transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
@@ -170,7 +171,7 @@ function ReviewPage({ currentUser }) {
             </div>
           </div>
           <Link
-            to="/lightner"
+            to="/progress"
             className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
                        text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
                        transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
@@ -190,6 +191,15 @@ function ReviewPage({ currentUser }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
       <div className="max-w-4xl mx-auto pb-32">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1.5 
+                          shadow-sm border border-gray-100 mb-4"
+          >
+            {wordSets.french.icon()}
+            <span className="text-sm font-medium text-gray-700">{wordSets.french.name}</span>
+          </div>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 

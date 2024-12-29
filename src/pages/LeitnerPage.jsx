@@ -1,15 +1,17 @@
-// src/pages/LightnerPage.jsx
+// src/pages/LeitnerPage.jsx
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { words } from '../data/words'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import LoadingState from '../components/LoadingState'
+import { wordSets } from '../data/words'
 
-function LightnerPage({ currentUser }) {
+function LeitnerPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [showResetModal, setShowResetModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
+  const [firstName, setFirstName] = useState('')
 
   const boxes = [1, 2, 3, 4, 5]
 
@@ -17,7 +19,7 @@ function LightnerPage({ currentUser }) {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
     const init = {}
-    words.forEach(word => {
+    wordSets.french.words.forEach(word => {
       init[word.id] = 1
     })
     return init
@@ -36,10 +38,11 @@ function LightnerPage({ currentUser }) {
       if (snap && snap.exists()) {
         const data = snap.data()
         setLeitnerBoxes(data.leitnerBoxes || {})
+        setFirstName(data.firstName || '')
       } else {
         // create default if doc doesn't exist
         const init = {}
-        words.forEach(word => {
+        wordSets.french.words.forEach(word => {
           init[word.id] = 1
         })
         await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
@@ -86,7 +89,7 @@ function LightnerPage({ currentUser }) {
 
   const handleReset = async () => {
     const init = {}
-    words.forEach(word => {
+    wordSets.french.words.forEach(word => {
       init[word.id] = 1
     })
     setLeitnerBoxes(init)
@@ -121,15 +124,22 @@ function LightnerPage({ currentUser }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-6xl mx-auto px-4 py-24">
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
+            {wordSets.french.icon()}
+            <span className="font-medium text-gray-700">{wordSets.french.name}</span>
+          </div>
+        </div>
+
         <div className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
-            Your Learning
+            {firstName ? `${firstName}'s` : 'Your'} Learning
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-lime-600 ml-3">
               Progress
             </span>
           </h1>
           <p className="text-gray-600 max-w-2xl mx-auto text-lg leading-relaxed">
-            Track your journey through the Leitner system. Master words at your own pace.
+            {wordSets.french.description}
           </p>
         </div>
 
@@ -438,4 +448,4 @@ function LightnerPage({ currentUser }) {
   )
 }
 
-export default LightnerPage
+export default LeitnerPage

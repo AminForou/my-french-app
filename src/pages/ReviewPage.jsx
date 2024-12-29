@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.jsx
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore' // [UPDATED]
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -14,10 +14,14 @@ function ReviewPage({ currentUser }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
 
-  // fallback for guests or if snapshot fails
   function loadFromLocal() {
+    console.log('[LOG] Loading from localStorage...')
     const stored = localStorage.getItem('leitnerBoxes')
-    if (stored) return JSON.parse(stored)
+    if (stored) {
+      console.log('[LOG] Found localStorage data!')
+      return JSON.parse(stored)
+    }
+    console.log('[LOG] No localStorage data found; building default...')
     const init = {}
     words.forEach(w => { init[w.id] = 1 })
     return init
@@ -25,56 +29,75 @@ function ReviewPage({ currentUser }) {
 
   useEffect(() => {
     if (!currentUser) {
-      // not logged in => load local
+      console.log('[LOG] No currentUser; using localStorage for progress')
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
       return
     }
 
+    console.log('[LOG] Attempting to read Firestore doc for user:', currentUser.uid)
     const ref = doc(db, 'users', currentUser.uid)
-    const unsub = onSnapshot(ref, snapshot => {
-      if (snapshot.exists()) {
-        setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
-      } else {
-        // doc not found => create default
-        const init = {}
-        words.forEach(w => { init[w.id] = 1 })
-        setDoc(ref, { leitnerBoxes: init })
-        setLeitnerBoxes(init)
+    const unsub = onSnapshot(ref,
+      snapshot => {
+        if (snapshot.exists()) {
+          console.log('[LOG] Firestore doc found! Data:', snapshot.data())
+          setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
+        } else {
+          console.log('[LOG] Firestore doc does NOT exist; creating default...')
+          const init = {}
+          words.forEach(w => { init[w.id] = 1 })
+          setDoc(ref, { leitnerBoxes: init })
+            .then(() => console.log('[LOG] Default doc created in Firestore!'))
+            .catch(err => console.error('Error creating default doc:', err))
+          setLeitnerBoxes(init)
+        }
+        setLoadingData(false)
+      },
+      err => {
+        console.warn('[LOG] onSnapshot error, falling back to local storage:', err)
+        setLeitnerBoxes(loadFromLocal())
+        setLoadingData(false)
       }
-      setLoadingData(false)
-    }, (err) => {
-      console.warn('onSnapshot error in ReviewPage, fallback local:', err)
-      setLeitnerBoxes(loadFromLocal())
-      setLoadingData(false)
-    })
+    )
 
-    return () => unsub()
+    return () => {
+      console.log('[LOG] Unsubscribing from onSnapshot for user:', currentUser.uid)
+      unsub()
+    }
   }, [currentUser])
 
-  // Save to local + Firestore
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
-    // Save to local
+    console.log('[LOG] Storing leitnerBoxes to localStorage...')
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
-    // If logged in, save to Firestore
     if (currentUser) {
       const ref = doc(db, 'users', currentUser.uid)
+      console.log('[LOG] Saving leitnerBoxes to Firestore for user:', currentUser.uid)
       setDoc(ref, { leitnerBoxes }, { merge: true })
+        .then(async () => {
+          console.log('[LOG] Successfully saved to Firestore! Now verifying via getDoc...')
+          const snap = await getDoc(ref)
+          if (snap.exists()) {
+            console.log('[LOG] getDoc after setDoc => doc data:', snap.data())
+          } else {
+            console.warn('[LOG] getDoc after setDoc => doc does NOT exist?!')
+          }
+        })
         .catch(e => console.error('Saving to Firestore failed:', e))
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Filter the words for this box
+  // Filter words for this box
   const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const sessionWords = boxWords.slice(0, 10)
 
   const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
 
   const moveToNextBox = (wordId) => {
+    console.log(`[LOG] Moving wordId ${wordId} up a box...`)
     setLeitnerBoxes(prev => {
       const currentBox = prev[wordId]
       const nextBox = currentBox < 5 ? currentBox + 1 : 5
@@ -83,10 +106,12 @@ function ReviewPage({ currentUser }) {
   }
 
   const moveToBoxOne = (wordId) => {
+    console.log(`[LOG] Resetting wordId ${wordId} to box 1...`)
     setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
   }
 
   if (loadingData) {
+    console.log('[LOG] Still loadingData in ReviewPage; returning loader...')
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Loading review data...</p>
@@ -188,8 +213,9 @@ function ReviewPage({ currentUser }) {
       <div className="max-w-4xl mx-auto pb-32">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
-                          shadow-sm border border-gray-100 mb-4"
+          <div
+            className="inline-flex items-center justify-center gap-2 bg-white rounded-full px-4 py-1 
+                       shadow-sm border border-gray-100 mb-4"
           >
             <span className="text-sm font-medium text-gray-600">Box</span>
             <span className="text-sm font-bold text-blue-600">{boxNumber}</span>

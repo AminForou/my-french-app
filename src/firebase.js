@@ -3,6 +3,9 @@ import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
+// [LOG] Starting Firebase initialization
+console.log('Initializing Firebase...')
+
 const firebaseConfig = {
   apiKey: "AIzaSyDGsb7CgepFZlTJd1NEO2-RgrpXcCwq2aY",
   authDomain: "my-french-app.firebaseapp.com",
@@ -13,5 +16,10 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
+console.log('Firebase App initialized:', app.name) // [LOG]
+
 export const auth = getAuth(app)
+console.log('Firebase Auth ready:', auth) // [LOG]
+
 export const db = getFirestore(app)
+console.log('Firestore ready:', db) // [LOG]

@@ -1,15 +1,17 @@
 // src/firebase.js
+
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
+// For Vite environment variables:
 const firebaseConfig = {
-  apiKey: "AIzaSyDGsb7CgepFZlTJd1NEO2-RgrpXcCwq2aY",
-  authDomain: "my-french-app.firebaseapp.com",
-  projectId: "my-french-app",
-  storageBucket: "my-french-app.firebasestorage.app",
-  messagingSenderId: "976748305651",
-  appId: "1:976748305651:web:2fda9e2b0bfa05faf7ab86"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 }
 
 const app = initializeApp(firebaseConfig)

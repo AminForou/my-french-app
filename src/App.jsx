@@ -57,7 +57,7 @@ function App() {
 
           {/* Protected Routes */}
           <Route
-            path="/progress"
+            path="/profile"
             element={
               <ProtectedRoute user={currentUser}>
                 <LeitnerPage currentUser={currentUser} />

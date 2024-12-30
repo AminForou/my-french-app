@@ -293,6 +293,15 @@ function LeitnerPage({ currentUser }) {
         </div>
 
         {/* Course Header with Reset Button */}
+                {/* Course Progress Section */}
+                <div className="mb-6">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Learning Progress
+            </h2>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">

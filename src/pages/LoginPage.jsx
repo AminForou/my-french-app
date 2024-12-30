@@ -87,7 +87,7 @@ function LoginPage() {
           }
         }
 
-        navigate('/')
+        navigate('/profile')
       }
     } catch (err) {
       console.error(err)
@@ -130,7 +130,7 @@ function LoginPage() {
       }
 
       // Signed in => go home
-      navigate('/')
+      navigate('/profile')
     } catch (err) {
       console.error(err)
       setError(err.message)

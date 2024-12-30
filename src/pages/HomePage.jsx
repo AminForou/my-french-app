@@ -63,7 +63,7 @@ function HomePage({ currentUser }) {
             /* Logged in => Show normal "Start Learning" and "Quick Review" */
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
               <Link
-                to="/progress"
+                to="/profile"
                 className="inline-flex items-center justify-center px-8 py-4 text-lg font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               >
                 Start Learning
@@ -175,7 +175,7 @@ function HomePage({ currentUser }) {
           ) : (
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/progress"
+                to="/profile"
                 className="inline-flex items-center justify-center px-8 py-3 text-base font-medium rounded-xl text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
               >
                 Get Started Now

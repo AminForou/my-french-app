@@ -102,9 +102,9 @@ function Navbar({ currentUser, onSignOut }) {
                   
                   {/* Profile Link */}
                   <Link
-                    to="/progress"
+                    to="/profile"
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                      isActive('/progress')
+                      isActive('/profile')
                         ? 'bg-blue-50 text-blue-700'
                         : 'text-gray-700 hover:bg-gray-50'
                     }`}
@@ -195,10 +195,10 @@ function Navbar({ currentUser, onSignOut }) {
               {/* Profile Section for Mobile */}
               <div className="py-2">
                 <Link
-                  to="/progress"
+                  to="/profile"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`flex items-center px-4 py-3 rounded-xl ${
-                    isActive('/progress')
+                    isActive('/profile')
                       ? 'bg-blue-50'
                       : 'hover:bg-gray-50'
                   }`}

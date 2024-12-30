@@ -256,7 +256,7 @@ function ReviewPage({ currentUser }) {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/progress"
+                to="/profile"
                 className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
                            text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
                            transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
@@ -317,7 +317,7 @@ function ReviewPage({ currentUser }) {
             </div>
           </div>
           <Link
-            to="/progress"
+            to="/profile"
             className="inline-flex items-center justify-center px-6 py-3 text-base font-medium rounded-xl 
                        text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
                        transform transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"

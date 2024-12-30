@@ -41,7 +41,7 @@ function LoginPage() {
 
     try {
       if (isRegistering) {
-        // 1) Create user
+        // 1) Create user in Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password)
         const user = userCredential.user
 
@@ -49,11 +49,15 @@ function LoginPage() {
         const defaultBoxes = getDefaultLeitnerBoxes()
         const userRef = doc(db, 'users', user.uid)
 
+        // IMPORTANT: we now add totalTimeSpent=0, streak=0, lastStudyDate=""
         await setDoc(
           userRef, 
           {
             firstName: firstName || '', 
-            leitnerBoxes: defaultBoxes
+            leitnerBoxes: defaultBoxes,
+            totalTimeSpent: 0,
+            streak: 0,
+            lastStudyDate: ''  // or new Date().toDateString(), if you want a default
           }, 
           { merge: true }
         )
@@ -80,14 +84,17 @@ function LoginPage() {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      // Check if doc exists; if not, create with defaultBoxes
+      // Check if doc exists; if not, create with defaultBoxes + our new fields
       const docRef = doc(db, 'users', user.uid)
       const docSnap = await getDoc(docRef)
       if (!docSnap.exists()) {
         const defaultBoxes = getDefaultLeitnerBoxes()
         await setDoc(docRef, {
           firstName: user.displayName?.split(' ')[0] || '',
-          leitnerBoxes: defaultBoxes
+          leitnerBoxes: defaultBoxes,
+          totalTimeSpent: 0,
+          streak: 0,
+          lastStudyDate: ''
         })
       }
 
@@ -125,8 +132,10 @@ function LoginPage() {
                   strokeLinecap="round" 
                   strokeLinejoin="round" 
                   strokeWidth={2} 
-                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 
-                     1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" 
+                  d="M15 7a2 2 0 012 2m4 0a6 
+                     6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 
+                     1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 
+                     6 0 1121 9z" 
                 />
               </svg>
             </div>
@@ -167,7 +176,8 @@ function LoginPage() {
                     d="M12 9v2m0 4h.01m-6.938 
                        4h13.856c1.54 0 2.502-1.667 
                        1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 
-                       0L3.34 16c-.77 1.333.192 3 1.732 3z" 
+                       0L3.34 16c-.77 1.333.192 3 
+                       1.732 3z" 
                   />
                 </svg>
                 {error}

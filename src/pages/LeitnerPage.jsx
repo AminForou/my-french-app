@@ -12,6 +12,11 @@ function LeitnerPage({ currentUser }) {
   const [showResetModal, setShowResetModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
   const [firstName, setFirstName] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  // NEW: We'll also track totalTimeSpent + streak
+  const [totalTimeSpent, setTotalTimeSpent] = useState(0) // in seconds
+  const [streak, setStreak] = useState(0)
 
   const boxes = [1, 2, 3, 4, 5]
 
@@ -39,6 +44,9 @@ function LeitnerPage({ currentUser }) {
         const data = snap.data()
         setLeitnerBoxes(data.leitnerBoxes || {})
         setFirstName(data.firstName || '')
+        setIsAdmin(data.isAdmin || false)
+        setTotalTimeSpent(data.totalTimeSpent || 0)
+        setStreak(data.streak || 0)
       } else {
         // create default if doc doesn't exist
         const init = {}
@@ -102,13 +110,35 @@ function LeitnerPage({ currentUser }) {
     if (currentUser) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid)
-        // merge only overwrites leitnerBoxes, so firstName remains
+        // merge only overwrites leitnerBoxes, so firstName, totalTimeSpent, streak remain
         await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
       } catch (err) {
         console.error('Failed to reset progress in Firestore:', err)
       }
     }
     setShowResetModal(false)
+  }
+
+  // Helper function to format time in a more readable way
+  const formatTimeSpent = (seconds) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    
+    if (hours > 0) {
+      return {
+        primary: hours,
+        secondary: minutes,
+        primaryUnit: 'hour',
+        secondaryUnit: 'min'
+      }
+    } else {
+      return {
+        primary: minutes,
+        secondary: seconds % 60,
+        primaryUnit: 'min',
+        secondaryUnit: 'sec'
+      }
+    }
   }
 
   if (loadingData) {
@@ -124,27 +154,122 @@ function LeitnerPage({ currentUser }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-6xl mx-auto px-4 py-24">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
-            {wordSets.french.icon()}
-            <span className="font-medium text-gray-700">{wordSets.french.name}</span>
+        {/* Enhanced Profile Section */}
+        <div className="mb-16">
+          <div className="relative">
+            <div className="absolute inset-0 h-32 bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl -z-10 opacity-10" />
+            
+            <div className="pt-8 px-8">
+              {/* Profile Header */}
+              <div className="flex items-center gap-6 mb-8">
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
+                  {firstName ? firstName[0].toUpperCase() : currentUser?.email[0].toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-3 mb-1">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      {firstName ? `${firstName}'s Dashboard` : 'Your Dashboard'}
+                    </h1>
+                    {/* Admin Badge */}
+                    {isAdmin && (
+                      <span className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
+                        Admin
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                    {currentUser?.email}
+                  </p>
+                </div>
+              </div>
+
+              {/* Stats Cards with Admin Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Streak Card - More Subtle */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">Current Streak</div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-semibold text-gray-900">{streak}</span>
+                        <span className="text-sm text-gray-500">days</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Study Time Card - More Subtle */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-lime-50 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-lime-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500">Total Study Time</div>
+                      <div className="flex items-baseline gap-1">
+                        {(() => {
+                          const time = formatTimeSpent(totalTimeSpent)
+                          return (
+                            <>
+                              <span className="text-xl font-semibold text-gray-900">{time.primary}</span>
+                              <span className="text-sm text-gray-500">{time.primaryUnit}</span>
+                              {time.secondary > 0 && (
+                                <>
+                                  <span className="text-xl font-semibold text-gray-900 ml-2">{time.secondary}</span>
+                                  <span className="text-sm text-gray-500">{time.secondaryUnit}</span>
+                                </>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Admin Actions - Only shown if user is admin */}
+                {isAdmin && (
+                  <div className="md:col-span-2 mt-4">
+                    <Link
+                      to="/admin/flags"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transition-all duration-200"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                      </svg>
+                      View Flagged Cards
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
-            {firstName ? `${firstName}'s` : 'Your'} Learning
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-lime-600 ml-3">
-              Progress
-            </span>
-          </h1>
-          <p className="text-gray-600 max-w-2xl mx-auto text-lg leading-relaxed">
-            {wordSets.french.description}
-          </p>
-        </div>
+        {/* Course Header with Reset Button */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
+              {wordSets.french.icon()}
+              <span className="font-medium text-gray-700">{wordSets.french.name}</span>
+            </div>
+            <p className="text-gray-500 text-sm">{wordSets.french.description}</p>
+          </div>
 
-        {/* Reset Button */}
-        <div className="flex justify-end mb-8">
           <button
             onClick={() => setShowResetModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 shadow-sm transition-all duration-200 hover:-translate-y-0.5 group"
@@ -159,12 +284,7 @@ function LeitnerPage({ currentUser }) {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M4 4v5h.582m15.356 
-                   2A8.001 8.001 0 004.582 
-                   9m0 0H9m11 
-                   11v-5h-.581m0 
-                   0a8.003 8.003 0 01-15.357-2m15.357 
-                   2H15"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
               />
             </svg>
             Reset Progress
@@ -204,7 +324,7 @@ function LeitnerPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Boxes */}
+        {/* Leitner Boxes */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
           {boxes.map((box) => {
             const count = getCountForBox(box)
@@ -240,7 +360,8 @@ function LeitnerPage({ currentUser }) {
                     </span>
                     <span
                       className={`
-                        text-4xl font-extrabold
+                        font-extrabold
+                        ${count >= 1000 ? 'text-3xl' : 'text-4xl'}
                         ${
                           status === 'due'
                             ? 'text-blue-500'
@@ -320,8 +441,7 @@ function LeitnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 
-                         11-18 0 9 9 0 0118 0z"
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
                 </div>
@@ -345,13 +465,8 @@ function LeitnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M9 5H7a2 
-                         2 0 00-2 2v12a2 
-                         2 0 002 2h10a2 
-                         2 0 002-2V7a2 
-                         2 0 00-2-2h-2M9 
-                         5a2 2 0 002 2h2a2 
-                         2 0 002-2M9 
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 
+                         5a2 2 0 002 2h2a2 2 0 002-2M9 
                          5a2 2 0 012-2h2a2 
                          2 0 012 2"
                     />

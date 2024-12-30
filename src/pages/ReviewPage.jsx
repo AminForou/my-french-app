@@ -1,7 +1,7 @@
 // src/pages/ReviewPage.jsx
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { words } from '../data/words'
 import Card from '../components/Card'
@@ -15,60 +15,86 @@ function ReviewPage({ currentUser }) {
   const { boxId = '1' } = useParams()
   const boxNumber = parseInt(boxId, 10) || 1
 
+  // Leitner boxes
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const [loadingData, setLoadingData] = useState(true)
 
-  // NEW: local state for language mode (en, fa, both)
+  // Language, session size
   const [languageMode, setLanguageMode] = useState('en')
-
-  // NEW: local state for session size (slider), default 15
   const [sessionSize, setSessionSize] = useState(15)
 
+  // Track session time
+  // We'll store sessionStart in a REF so it doesn't get overwritten by re-renders:
+  const sessionStartRef = useRef(null)
+
+  // Track if we've updated stats so we don't double count
+  const [statsUpdated, setStatsUpdated] = useState(false)
+
+  // Add firstName state
+  const [firstName, setFirstName] = useState('')
+
+  // Load local fallback
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
     const init = {}
-    words.forEach(w => {
+    words.forEach((w) => {
       init[w.id] = 1
     })
     return init
   }
 
+  // 1) On mount, set up onSnapshot if logged in
   useEffect(() => {
+    // If no user => fallback
     if (!currentUser) {
       setLeitnerBoxes(loadFromLocal())
       setLoadingData(false)
+      // Initialize sessionStart only once
+      sessionStartRef.current = Date.now()
       return
     }
 
-    const ref = doc(db, 'users', currentUser.uid)
+    const userRef = doc(db, 'users', currentUser.uid)
     const unsub = onSnapshot(
-      ref,
-      snapshot => {
-        if (snapshot.exists()) {
-          setLeitnerBoxes(snapshot.data().leitnerBoxes || {})
+      userRef,
+      (snap) => {
+        if (snap.exists()) {
+          setLeitnerBoxes(snap.data().leitnerBoxes || {})
         } else {
           // doc not found => create default
           const init = {}
-          words.forEach(w => {
+          words.forEach((w) => {
             init[w.id] = 1
           })
-          setDoc(ref, { leitnerBoxes: init }, { merge: true })
+          setDoc(userRef, { leitnerBoxes: init }, { merge: true })
           setLeitnerBoxes(init)
         }
         setLoadingData(false)
+
+        // Set sessionStart **once** if not set
+        if (!sessionStartRef.current) {
+          sessionStartRef.current = Date.now()
+        }
       },
-      err => {
+      (err) => {
         console.warn('onSnapshot error in ReviewPage, fallback local:', err)
         setLeitnerBoxes(loadFromLocal())
         setLoadingData(false)
+        if (!sessionStartRef.current) {
+          sessionStartRef.current = Date.now()
+        }
       }
     )
 
-    return () => unsub()
+    return () => {
+      // NO finalizeStats here => we will finalize only on session completion or if you want on route change
+      unsub()
+    }
   }, [currentUser])
 
+  // 2) Whenever leitnerBoxes changes, save locally + Firestore (except while loading)
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
@@ -76,45 +102,115 @@ function ReviewPage({ currentUser }) {
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
     if (currentUser) {
-      const ref = doc(db, 'users', currentUser.uid)
-      setDoc(ref, { leitnerBoxes }, { merge: true }).catch(e =>
+      const userRef = doc(db, 'users', currentUser.uid)
+      setDoc(userRef, { leitnerBoxes }, { merge: true }).catch((e) =>
         console.error('Saving to Firestore failed:', e)
       )
     }
   }, [leitnerBoxes, currentUser, loadingData])
 
-  // Grab words belonging to this box
-  const boxWords = words.filter(w => leitnerBoxes[w.id] === boxNumber)
+  // 3) finalizeStats called only once, at session completion (or possibly route change)
+  const finalizeStats = async () => {
+    if (!currentUser) return
+    if (statsUpdated) return // in case it's called twice
 
-  // Max possible session size: either 40 or however many words are in the box, whichever is smaller
+    setStatsUpdated(true)
+
+    const endTime = Date.now()
+    const elapsedSecs = Math.floor((endTime - (sessionStartRef.current || endTime)) / 1000)
+    // If for some reason sessionStartRef was never set, fallback to 0.
+
+    try {
+      const userRef = doc(db, 'users', currentUser.uid)
+      const snap = await getDoc(userRef)
+      if (!snap.exists()) return
+
+      let { totalTimeSpent = 0, lastStudyDate = '', streak = 0 } = snap.data()
+
+      // Add new elapsed time
+      totalTimeSpent += elapsedSecs
+
+      // Check streak
+      const todayStr = new Date().toDateString() // e.g. "Mon Feb 06 2023"
+      const last = new Date(lastStudyDate)
+      const lastStr = last.toDateString()
+      const nowMid = new Date(todayStr) // midnight
+      const lastMid = new Date(lastStr)
+      const oneDay = 1000 * 60 * 60 * 24
+      const diffDays = Math.floor((nowMid - lastMid) / oneDay)
+
+      if (diffDays === 1) {
+        streak += 1
+      } else if (diffDays > 1 || diffDays < 0) {
+        streak = 1
+      }
+      // if diffDays === 0 => same day => do nothing
+
+      lastStudyDate = todayStr
+
+      await setDoc(
+        userRef,
+        {
+          totalTimeSpent,
+          lastStudyDate,
+          streak
+        },
+        { merge: true }
+      )
+      console.log(`finalizeStats: +${elapsedSecs}s, totalTimeSpent => ${totalTimeSpent}`)
+    } catch (err) {
+      console.error('finalizeStats error:', err)
+    }
+  }
+
+  // 4) Gather words from this box
+  const boxWords = words.filter((w) => leitnerBoxes[w.id] === boxNumber)
   const maxSessionPossible = Math.min(40, boxWords.length)
-
-  // The actual words for this session: slice up to sessionSize
   const sessionWords = boxWords.slice(0, sessionSize)
 
-  // If the user changes the slider, update sessionSize
+  // Handler for slider
   const handleSessionSizeChange = (e) => {
     setSessionSize(parseInt(e.target.value, 10))
   }
 
-  const moveToNextCard = () => setCurrentIndex(prev => prev + 1)
+  // Move to next card
+  const moveToNextCard = () => setCurrentIndex((prev) => prev + 1)
 
-  const moveToNextBox = wordId => {
-    setLeitnerBoxes(prev => {
+  // Box movement
+  const moveToNextBox = (wordId) => {
+    setLeitnerBoxes((prev) => {
       const currentBox = prev[wordId]
       const nextBox = currentBox < 5 ? currentBox + 1 : 5
       return { ...prev, [wordId]: nextBox }
     })
   }
 
-  const moveToBoxOne = wordId => {
-    setLeitnerBoxes(prev => ({ ...prev, [wordId]: 1 }))
+  const moveToBoxOne = (wordId) => {
+    setLeitnerBoxes((prev) => ({ ...prev, [wordId]: 1 }))
   }
 
-  // Handler from LanguageSelector
-  const handleLanguageChange = mode => {
+  // Language
+  const handleLanguageChange = (mode) => {
     setLanguageMode(mode)
   }
+
+  // Add useEffect to fetch user data
+  useEffect(() => {
+    async function fetchUserData() {
+      if (!currentUser) return
+      
+      try {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
+        if (userDoc.exists()) {
+          setFirstName(userDoc.data().firstName || '')
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+      }
+    }
+
+    fetchUserData()
+  }, [currentUser])
 
   if (loadingData) {
     return (
@@ -124,25 +220,22 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // If no words in box, user sees "Box is Empty"
   if (sessionWords.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 pt-32 px-4">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100">
             <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg
-                className="w-8 h-8 text-lime-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg className="w-8 h-8 text-lime-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Box {boxNumber} is Empty
-            </h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Box {boxNumber} is Empty</h2>
             <p className="text-gray-600 mb-8">
               Great job! You've completed all the words in this box for now. Come back later or try another box.
             </p>
@@ -172,25 +265,20 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // If user finished all sessionWords
+  // If done with all sessionWords
   if (currentIndex >= sessionWords.length) {
+    // finalize once
+    if (!statsUpdated && currentUser && sessionStartRef.current) {
+      finalizeStats()
+    }
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50 flex flex-col items-center justify-center p-4">
         <div className="bg-white rounded-2xl p-8 md:p-12 shadow-lg border border-gray-100 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg
-              className="w-8 h-8 text-lime-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12l2 2 4-4m6 2a9 9 0 
-                   11-18 0 9 9 0 0118 0z"
-              />
+            <svg className="w-8 h-8 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 
+                   11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -225,7 +313,7 @@ function ReviewPage({ currentUser }) {
     )
   }
 
-  // We have some words left to review
+  // Otherwise, still reviewing
   const currentWordData = sessionWords[currentIndex]
   const currentCardNumber = currentIndex + 1
   const totalCards = sessionWords.length
@@ -296,13 +384,15 @@ function ReviewPage({ currentUser }) {
             moveToBoxOne={moveToBoxOne}
             goToNextCard={moveToNextCard}
             languageMode={languageMode}
+            currentUser={currentUser}
+            firstName={firstName}
           />
         </div>
 
         {/* Controls section */}
         <div className="mt-8 space-y-8">
           <LanguageSelector onChange={handleLanguageChange} value={languageMode} />
-          
+
           <CardStackSelector
             value={sessionSize}
             onChange={(e) => setSessionSize(parseInt(e.target.value, 10))}

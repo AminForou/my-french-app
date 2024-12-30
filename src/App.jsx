@@ -13,6 +13,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { auth } from './firebase'
 import AboutPage from './pages/AboutPage'
 import ContactPage from './pages/ContactPage'
+import FlaggedCardsPage from './pages/FlaggedCardsPage'
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -76,6 +77,14 @@ function App() {
             element={
               <ProtectedRoute user={currentUser}>
                 <ReviewPage currentUser={currentUser} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/flags"
+            element={
+              <ProtectedRoute user={currentUser}>
+                <FlaggedCardsPage currentUser={currentUser} />
               </ProtectedRoute>
             }
           />

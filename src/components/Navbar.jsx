@@ -1,12 +1,15 @@
 // src/components/Navbar.jsx
 import { Link, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../firebase'
 import logo from '../assets/logo.png'
 
 function Navbar({ currentUser, onSignOut }) {
   const location = useLocation()
   const [scrolled, setScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [firstName, setFirstName] = useState('')
   
   useEffect(() => {
     const handleScroll = () => {
@@ -15,6 +18,23 @@ function Navbar({ currentUser, onSignOut }) {
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  useEffect(() => {
+    async function fetchUserData() {
+      if (!currentUser) return
+      
+      try {
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
+        if (userDoc.exists()) {
+          setFirstName(userDoc.data().firstName || '')
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+      }
+    }
+
+    fetchUserData()
+  }, [currentUser])
 
   const isActive = (path) => location.pathname === path
 
@@ -43,24 +63,8 @@ function Navbar({ currentUser, onSignOut }) {
           <div className="hidden md:flex items-center">
             {currentUser ? (
               <>
-                {/* Primary Actions */}
+                {/* Primary Action */}
                 <div className="flex items-center space-x-3 mr-8">
-                  <Link
-                    to="/progress"
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                      isActive('/progress')
-                        ? 'text-blue-700 bg-blue-50'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="flex items-center">
-                      <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M16 8v8m-4-5v5M8 8v8m-4-5v5M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                      </svg>
-                      View Progress
-                    </span>
-                  </Link>
                   <Link
                     to="/review/1"
                     className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
@@ -73,7 +77,7 @@ function Navbar({ currentUser, onSignOut }) {
                   </Link>
                 </div>
 
-                {/* Secondary Actions */}
+                {/* Secondary Actions with Profile Dropdown */}
                 <div className="flex items-center space-x-2 border-l border-gray-200 pl-8">
                   <Link
                     to="/about"
@@ -95,9 +99,25 @@ function Navbar({ currentUser, onSignOut }) {
                   >
                     Contact
                   </Link>
+                  
+                  {/* Profile Link */}
+                  <Link
+                    to="/progress"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all duration-200 ${
+                      isActive('/progress')
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium text-sm">
+                      {firstName ? firstName[0].toUpperCase() : currentUser.email[0].toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium">Profile</span>
+                  </Link>
+
                   <button
                     onClick={onSignOut}
-                    className="p-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors duration-200 flex items-center"
+                    className="p-2 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors duration-200"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
@@ -172,23 +192,29 @@ function Navbar({ currentUser, onSignOut }) {
         <div className="px-4 pt-2 pb-3 space-y-2 bg-white/95 backdrop-blur-sm shadow-lg divide-y divide-gray-100">
           {currentUser ? (
             <>
-              {/* Primary Actions */}
-              <div className="py-2 space-y-2">
+              {/* Profile Section for Mobile */}
+              <div className="py-2">
                 <Link
                   to="/progress"
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`flex items-center px-4 py-2.5 rounded-xl text-base font-medium ${
+                  className={`flex items-center px-4 py-3 rounded-xl ${
                     isActive('/progress')
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-blue-50'
+                      : 'hover:bg-gray-50'
                   }`}
                 >
-                  <svg className="w-5 h-5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M16 8v8m-4-5v5M8 8v8m-4-5v5M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  </svg>
-                  View Progress
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-medium">
+                    {firstName ? firstName[0].toUpperCase() : currentUser.email[0].toUpperCase()}
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-sm font-medium text-gray-900">Profile</div>
+                    <div className="text-xs text-gray-500">{currentUser.email}</div>
+                  </div>
                 </Link>
+              </div>
+
+              {/* Other Mobile Menu Items */}
+              <div className="py-2 space-y-2">
                 <Link
                   to="/review/1"
                   onClick={() => setIsMobileMenuOpen(false)}

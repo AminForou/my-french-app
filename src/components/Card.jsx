@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import styles from './Card.module.css'
 import { doc, setDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'  // <-- your Firestore db import
+import Toast from './Toast'
+import { playFlag } from '../utils/sounds'
 
 function Card({
   wordData,
@@ -12,7 +14,8 @@ function Card({
   moveToBoxOne,
   goToNextCard,
   languageMode = 'en', // 'en' | 'fa' | 'both'
-  currentUser = null   // optionally pass user so we know who is flagging if they're logged in
+  currentUser = null,   // optionally pass user so we know who is flagging if they're logged in
+  firstName = ''
 }) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [swipeDirection, setSwipeDirection] = useState(null)
@@ -199,6 +202,9 @@ function Card({
   // ---------------------------
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [selectedReason, setSelectedReason] = useState('')
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [toastType, setToastType] = useState('success')
 
   const flagReasons = [
     { id: 'meaning', label: 'Incorrect Meaning' },
@@ -216,31 +222,31 @@ function Card({
   const handleFlag = async (reason) => {
     try {
       const flagsRef = collection(db, 'flags')
-
-      // Build flaggedBy string: if currentUser has a known firstName, store `uid / firstName`.
-      let flaggedByString = 'anonymous'
-      if (currentUser) {
-        // If user has a custom 'firstName' prop (for example),
-        // otherwise fallback to displayName or just uid:
-        const userFirst = currentUser.firstName || currentUser.displayName
-        flaggedByString = userFirst
-          ? `${currentUser.uid} / ${userFirst}`
-          : currentUser.uid
-      }
-
+      
       await setDoc(doc(flagsRef), {
         cardId: wordData.id,
-        flaggedBy: flaggedByString,
+        flaggedBy: currentUser ? currentUser.uid : 'anonymous',
+        flaggedByName: firstName || 'anonymous',
         flaggedAt: serverTimestamp(),
         reason: reason,
-        resolved: false  // default to false
+        resolved: false
       })
-
+      
       setShowFlagModal(false)
-      alert('Thank you for helping us improve! We will review this card.')
+      setToastMessage('Thank you for helping us improve! We will review this card.')
+      setToastType('success')
+      setShowToast(true)
+      playFlag()
+      
+      setTimeout(() => setShowToast(false), 3000)
     } catch (err) {
       console.error('Error flagging card:', err)
-      alert('Oops, something went wrong flagging this card.')
+      setShowFlagModal(false)
+      setToastMessage('Oops, something went wrong flagging this card.')
+      setToastType('error')
+      setShowToast(true)
+      
+      setTimeout(() => setShowToast(false), 3000)
     }
   }
 
@@ -440,6 +446,15 @@ function Card({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <Toast 
+          message={toastMessage}
+          type={toastType}
+          onClose={() => setShowToast(false)}
+        />
       )}
     </>
   )

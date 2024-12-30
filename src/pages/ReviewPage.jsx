@@ -7,6 +7,7 @@ import { words } from '../data/words'
 import Card from '../components/Card'
 import LoadingState from '../components/LoadingState'
 import { wordSets } from '../data/words'
+import { playSuccess } from '../utils/sounds'
 
 import LanguageSelector from '../components/LanguageSelector'
 import CardStackSelector from '../components/CardStackSelector'
@@ -270,6 +271,7 @@ function ReviewPage({ currentUser }) {
     // finalize once
     if (!statsUpdated && currentUser && sessionStartRef.current) {
       finalizeStats()
+      playSuccess() // Play success sound when session completes
     }
 
     return (

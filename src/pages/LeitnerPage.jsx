@@ -7,6 +7,9 @@ import { db } from '../firebase'
 import LoadingState from '../components/LoadingState'
 import { wordSets } from '../data/words'
 
+// (NEW) import the AchievementsGallery
+import AchievementsGallery from '../components/AchievementsGallery'
+
 function LeitnerPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
   const [showResetModal, setShowResetModal] = useState(false)
@@ -14,9 +17,12 @@ function LeitnerPage({ currentUser }) {
   const [firstName, setFirstName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
 
-  // NEW: We'll also track totalTimeSpent + streak
+  // We'll also track totalTimeSpent + streak
   const [totalTimeSpent, setTotalTimeSpent] = useState(0) // in seconds
   const [streak, setStreak] = useState(0)
+
+  // (NEW) We'll store achievements object from user doc if it exists
+  const [achievementsMap, setAchievementsMap] = useState({})
 
   const boxes = [1, 2, 3, 4, 5]
 
@@ -47,6 +53,9 @@ function LeitnerPage({ currentUser }) {
         setIsAdmin(data.isAdmin || false)
         setTotalTimeSpent(data.totalTimeSpent || 0)
         setStreak(data.streak || 0)
+
+        // (NEW) store achievements if present
+        setAchievementsMap(data.achievements || {})
       } else {
         // create default if doc doesn't exist
         const init = {}
@@ -110,7 +119,6 @@ function LeitnerPage({ currentUser }) {
     if (currentUser) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid)
-        // merge only overwrites leitnerBoxes, so firstName, totalTimeSpent, streak remain
         await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
       } catch (err) {
         console.error('Failed to reset progress in Firestore:', err)
@@ -119,11 +127,10 @@ function LeitnerPage({ currentUser }) {
     setShowResetModal(false)
   }
 
-  // Helper function to format time in a more readable way
+  // Helper to format time
   const formatTimeSpent = (seconds) => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
-    
     if (hours > 0) {
       return {
         primary: hours,
@@ -151,6 +158,21 @@ function LeitnerPage({ currentUser }) {
     )
   }
 
+  // (NEW) We'll compute wordsMastered quickly if we want to pass it for achievements:
+  const wordsMastered = Object.values(leitnerBoxes).filter(b => b === 5).length
+
+  // (NEW) Build a userData object to pass to AchievementsGallery
+  const userData = {
+    totalTimeSpent,
+    streak,
+    leitnerBoxes,
+    achievements: achievementsMap,
+    wordsMastered, 
+    // If you want to store lastStudyHour or inactiveDays, you can add them here too
+    // lastStudyHour: ...
+    // inactiveDays: ...
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
       <div className="max-w-6xl mx-auto px-4 py-24">
@@ -170,7 +192,6 @@ function LeitnerPage({ currentUser }) {
                     <h1 className="text-2xl font-bold text-gray-900">
                       {firstName ? `${firstName}'s Dashboard` : 'Your Dashboard'}
                     </h1>
-                    {/* Admin Badge */}
                     {isAdmin && (
                       <span className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-full">
                         Admin
@@ -180,22 +201,30 @@ function LeitnerPage({ currentUser }) {
                   <p className="text-gray-500 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 
+                           2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
                     {currentUser?.email}
                   </p>
                 </div>
               </div>
 
-              {/* Stats Cards with Admin Actions */}
+              {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Streak Card - More Subtle */}
                 <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
                       <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 
+                             01-2 2H5a2 2 0 
+                             01-2-2v-6a2 2 0 
+                             012-2m14 0V9a2 
+                             2 0 00-2-2M5 
+                             11V9a2 2 0 
+                             012-2m0 0V5a2 
+                             2 0 012-2h6a2 
+                             2 0 012 2v2M7 7h10"/>
                       </svg>
                     </div>
                     <div>
@@ -208,13 +237,14 @@ function LeitnerPage({ currentUser }) {
                   </div>
                 </div>
 
-                {/* Study Time Card - More Subtle */}
                 <div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-lime-50 flex items-center justify-center">
                       <svg className="w-5 h-5 text-lime-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                          d="M12 8v4l3 3m6-3a9 9 0 
+                             11-18 0 9 9 0 
+                             0118 0z"/>
                       </svg>
                     </div>
                     <div>
@@ -240,7 +270,7 @@ function LeitnerPage({ currentUser }) {
                   </div>
                 </div>
 
-                {/* Admin Actions - Only shown if user is admin */}
+                {/* Admin Actions */}
                 {isAdmin && (
                   <div className="md:col-span-2 mt-4">
                     <Link
@@ -249,7 +279,9 @@ function LeitnerPage({ currentUser }) {
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>
+                          d="M3 21v-4m0 0V5a2 
+                             2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 
+                             2 0 00-2 2zm9-13.5V9"/>
                       </svg>
                       View Flagged Cards
                     </Link>
@@ -265,9 +297,13 @@ function LeitnerPage({ currentUser }) {
           <div className="flex items-center gap-3">
             <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
               {wordSets.french.icon()}
-              <span className="font-medium text-gray-700">{wordSets.french.name}</span>
+              <span className="font-medium text-gray-700 text-xs sm:text-base">
+                {wordSets.french.name}
+              </span>
             </div>
-            <p className="text-gray-500 text-sm">{wordSets.french.description}</p>
+            <p className="text-gray-500 text-xs sm:text-sm hidden sm:block">
+              {wordSets.french.description}
+            </p>
           </div>
 
           <button
@@ -284,7 +320,14 @@ function LeitnerPage({ currentUser }) {
                 strokeLinecap="round" 
                 strokeLinejoin="round" 
                 strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                d="M4 4v5h.582m15.356 
+                   2A8.001 8.001 0 
+                   004.582 9m0 
+                   0H9m11 
+                   11v-5h-.581m0 
+                   0a8.003 8.003 
+                   0 01-15.357-2m15.357 
+                   2H15"
               />
             </svg>
             Reset Progress
@@ -422,88 +465,8 @@ function LeitnerPage({ currentUser }) {
           })}
         </div>
 
-        {/* Tips Section */}
-        <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
-          <h3 className="text-2xl font-bold text-gray-900 mb-6">
-            Learning Tips
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg 
-                    className="w-4 h-4 text-blue-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                </div>
-                <h4 className="font-medium text-gray-900">Regular Review</h4>
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                Review your words daily to maintain progress. Each box has a specific review schedule.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-lime-100 rounded-full flex items-center justify-center">
-                  <svg 
-                    className="w-4 h-4 text-lime-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 
-                         5a2 2 0 002 2h2a2 2 0 002-2M9 
-                         5a2 2 0 012-2h2a2 
-                         2 0 012 2"
-                    />
-                  </svg>
-                </div>
-                <h4 className="font-medium text-gray-900">Spaced Repetition</h4>
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                Words move through boxes based on your performance. Master them to reach Box 5!
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <svg 
-                    className="w-4 h-4 text-blue-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path 
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
-                  </svg>
-                </div>
-                <h4 className="font-medium text-gray-900">Stay Consistent</h4>
-              </div>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                Regular practice is key. Even a few minutes each day will help you progress.
-              </p>
-            </div>
-          </div>
-        </div>
+        {/* (NEW) Achievements Section */}
+        <AchievementsGallery user={userData} />
 
         {/* Reset Confirmation Modal */}
         {showResetModal && (

@@ -49,7 +49,7 @@ function LoginPage() {
         const defaultBoxes = getDefaultLeitnerBoxes()
         const userRef = doc(db, 'users', user.uid)
 
-        // IMPORTANT: we now add totalTimeSpent=0, streak=0, lastStudyDate=""
+        // Add achievements: {} here
         await setDoc(
           userRef, 
           {
@@ -57,7 +57,8 @@ function LoginPage() {
             leitnerBoxes: defaultBoxes,
             totalTimeSpent: 0,
             streak: 0,
-            lastStudyDate: ''  // or new Date().toDateString(), if you want a default
+            lastStudyDate: '',
+            achievements: {} // (NEW - achievements)
           }, 
           { merge: true }
         )
@@ -67,6 +68,25 @@ function LoginPage() {
       } else {
         // Sign in existing user
         await signInWithEmailAndPassword(auth, email, password)
+
+        // (NEW - achievements) - We check if user doc is missing achievements,
+        // and if so, we add it. Also ensures old users get this field.
+        const user = auth.currentUser
+        if (user) {
+          const userRef = doc(db, 'users', user.uid)
+          const docSnap = await getDoc(userRef)
+          if (docSnap.exists()) {
+            const data = docSnap.data()
+            if (!data.achievements) {
+              await setDoc(
+                userRef,
+                { achievements: {} },
+                { merge: true }
+              )
+            }
+          }
+        }
+
         navigate('/')
       }
     } catch (err) {
@@ -84,7 +104,7 @@ function LoginPage() {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      // Check if doc exists; if not, create with defaultBoxes + our new fields
+      // Check if doc exists; if not, create with defaultBoxes + fields
       const docRef = doc(db, 'users', user.uid)
       const docSnap = await getDoc(docRef)
       if (!docSnap.exists()) {
@@ -94,8 +114,19 @@ function LoginPage() {
           leitnerBoxes: defaultBoxes,
           totalTimeSpent: 0,
           streak: 0,
-          lastStudyDate: ''
+          lastStudyDate: '',
+          achievements: {}  // (NEW - achievements)
         })
+      } else {
+        // (NEW - achievements) If user doc exists but lacks achievements, add it
+        const data = docSnap.data()
+        if (!data.achievements) {
+          await setDoc(
+            docRef,
+            { achievements: {} },
+            { merge: true }
+          )
+        }
       }
 
       // Signed in => go home

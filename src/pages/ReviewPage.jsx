@@ -8,6 +8,7 @@ import Card from '../components/Card'
 import LoadingState from '../components/LoadingState'
 import { wordSets } from '../data/words'
 import { playSuccess } from '../utils/sounds'
+import { checkAndUpdateAchievements } from '../utils/achievementManager'
 
 import LanguageSelector from '../components/LanguageSelector'
 import CardStackSelector from '../components/CardStackSelector'
@@ -119,7 +120,6 @@ function ReviewPage({ currentUser }) {
 
     const endTime = Date.now()
     const elapsedSecs = Math.floor((endTime - (sessionStartRef.current || endTime)) / 1000)
-    // If for some reason sessionStartRef was never set, fallback to 0.
 
     try {
       const userRef = doc(db, 'users', currentUser.uid)
@@ -132,10 +132,10 @@ function ReviewPage({ currentUser }) {
       totalTimeSpent += elapsedSecs
 
       // Check streak
-      const todayStr = new Date().toDateString() // e.g. "Mon Feb 06 2023"
+      const todayStr = new Date().toDateString()
       const last = new Date(lastStudyDate)
       const lastStr = last.toDateString()
-      const nowMid = new Date(todayStr) // midnight
+      const nowMid = new Date(todayStr)
       const lastMid = new Date(lastStr)
       const oneDay = 1000 * 60 * 60 * 24
       const diffDays = Math.floor((nowMid - lastMid) / oneDay)
@@ -145,10 +145,10 @@ function ReviewPage({ currentUser }) {
       } else if (diffDays > 1 || diffDays < 0) {
         streak = 1
       }
-      // if diffDays === 0 => same day => do nothing
 
       lastStudyDate = todayStr
 
+      // Update user stats
       await setDoc(
         userRef,
         {
@@ -158,6 +158,20 @@ function ReviewPage({ currentUser }) {
         },
         { merge: true }
       )
+
+      // Check and update achievements with the updated user data
+      const updatedUserData = {
+        ...snap.data(),
+        totalTimeSpent,
+        lastStudyDate,
+        streak
+      }
+      
+      const newAchievements = await checkAndUpdateAchievements(updatedUserData, userRef)
+      if (newAchievements) {
+        playSuccess() // Play sound for new achievements
+      }
+
       console.log(`finalizeStats: +${elapsedSecs}s, totalTimeSpent => ${totalTimeSpent}`)
     } catch (err) {
       console.error('finalizeStats error:', err)

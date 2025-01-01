@@ -1,5 +1,4 @@
 // src/App.jsx
-
 import React, { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
@@ -15,9 +14,10 @@ import { auth } from './firebase'
 import AboutPage from './pages/AboutPage'
 import ContactPage from './pages/ContactPage'
 import FlaggedCardsPage from './pages/FlaggedCardsPage'
-
-// (NEW) import DemoPage
 import DemoPage from './pages/DemoPage'
+
+// (NEW) import the new AdminUsersPage
+import AdminUsersPage from './pages/AdminUsersPage'
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null)
@@ -58,8 +58,6 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
-
-          {/* (NEW) Demo Page: no auth required */}
           <Route path="/demo" element={<DemoPage />} />
 
           {/* Protected Routes */}
@@ -92,6 +90,16 @@ function App() {
             element={
               <ProtectedRoute user={currentUser}>
                 <FlaggedCardsPage currentUser={currentUser} />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* (NEW) Admin Users */}
+          <Route
+            path="/admin/users"
+            element={
+              <ProtectedRoute user={currentUser}>
+                <AdminUsersPage currentUser={currentUser} />
               </ProtectedRoute>
             }
           />

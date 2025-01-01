@@ -412,7 +412,7 @@ function LeitnerPage({ currentUser }) {
 
                 {/* Admin Actions */}
                 {isAdmin && (
-                  <div className="md:col-span-2 mt-4">
+                  <div className="md:col-span-2 mt-4 flex gap-3">
                     <Link
                       to="/admin/flags"
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transition-all duration-200"
@@ -422,19 +422,25 @@ function LeitnerPage({ currentUser }) {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M3 
-                             21v-4m0 
-                             0V5a2 
-                             2 0 
-                             012-2h6.5l1 1H21l-3 
-                             6 3 
-                             6h-8.5l-1-1H5a2 
-                             2 0 
-                             00-2 
-                             2zm9-13.5V9"
+                          d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
                         />
                       </svg>
                       View Flagged Cards
+                    </Link>
+
+                    <Link
+                      to="/admin/users"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-purple-700 bg-purple-50 hover:bg-purple-100 transition-all duration-200"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                        />
+                      </svg>
+                      Manage Users
                     </Link>
                   </div>
                 )}

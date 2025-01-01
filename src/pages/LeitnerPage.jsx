@@ -1,36 +1,53 @@
 // src/pages/LeitnerPage.jsx
+
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { words } from '../data/words'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import LoadingState from '../components/LoadingState'
-import { wordSets } from '../data/words'
+import { wordSets, words as allWords } from '../data/words'
 
 // (NEW) import the AchievementsGallery
 import AchievementsGallery from '../components/AchievementsGallery'
 
 function LeitnerPage({ currentUser }) {
   const [leitnerBoxes, setLeitnerBoxes] = useState({})
+  const [leitnerPositions, setLeitnerPositions] = useState({})
   const [showResetModal, setShowResetModal] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
   const [firstName, setFirstName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
 
   // We'll also track totalTimeSpent + streak
-  const [totalTimeSpent, setTotalTimeSpent] = useState(0) // in seconds
+  const [totalTimeSpent, setTotalTimeSpent] = useState(0)
   const [streak, setStreak] = useState(0)
 
-  // (NEW) We'll store achievements object from user doc if it exists
+  // We'll store achievements object from user doc if it exists
   const [achievementsMap, setAchievementsMap] = useState({})
+
+  // (NEW) track how many words are “active”
+  const [activeSet, setActiveSet] = useState(100) // default to 100 if not found in Firestore
 
   const boxes = [1, 2, 3, 4, 5]
 
+  // define getBoxStatus
+  const getBoxStatus = (boxNumber, count) => {
+    if (count === 0) return 'empty'
+    const today = new Date()
+    const lastReview = localStorage.getItem(`lastReview_box_${boxNumber}`) || '2000-01-01'
+    const daysSinceReview = Math.floor(
+      (today - new Date(lastReview)) / (1000 * 60 * 60 * 24)
+    )
+    return daysSinceReview >= boxNumber ? 'due' : 'reviewed'
+  }
+
+  // If user is not logged in => local fallback
   function loadFromLocal() {
     const stored = localStorage.getItem('leitnerBoxes')
     if (stored) return JSON.parse(stored)
+    // default to first 100
     const init = {}
-    wordSets.french.words.forEach(word => {
+    allWords.slice(0, 100).forEach(word => {
       init[word.id] = 1
     })
     return init
@@ -40,6 +57,7 @@ function LeitnerPage({ currentUser }) {
     async function fetchData() {
       if (!currentUser) {
         setLeitnerBoxes(loadFromLocal())
+        setLeitnerPositions({})
         setLoadingData(false)
         return
       }
@@ -49,86 +67,65 @@ function LeitnerPage({ currentUser }) {
       if (snap && snap.exists()) {
         const data = snap.data()
         setLeitnerBoxes(data.leitnerBoxes || {})
+        setLeitnerPositions(data.leitnerPositions || {})
         setFirstName(data.firstName || '')
         setIsAdmin(data.isAdmin || false)
         setTotalTimeSpent(data.totalTimeSpent || 0)
         setStreak(data.streak || 0)
-
-        // (NEW) store achievements if present
         setAchievementsMap(data.achievements || {})
+        setActiveSet(data.activeSet || 100)
       } else {
         // create default if doc doesn't exist
         const init = {}
-        wordSets.french.words.forEach(word => {
+        allWords.slice(0, 100).forEach(word => {
           init[word.id] = 1
         })
-        await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
+        const initPos = {}
+        allWords.slice(0, 100).forEach((w, i) => {
+          initPos[w.id] = i
+        })
+
+        await setDoc(
+          userDocRef, 
+          { 
+            leitnerBoxes: init,
+            leitnerPositions: initPos,
+            activeSet: 100,
+          }, 
+          { merge: true }
+        )
         setLeitnerBoxes(init)
+        setLeitnerPositions(initPos)
+        setActiveSet(100)
       }
       setLoadingData(false)
     }
     fetchData()
   }, [currentUser])
 
+  // Whenever leitnerBoxes changes
   useEffect(() => {
     if (loadingData) return
     if (!Object.keys(leitnerBoxes).length) return
 
-    // local
     localStorage.setItem('leitnerBoxes', JSON.stringify(leitnerBoxes))
 
-    // Firestore merge
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid)
-      setDoc(userDocRef, { leitnerBoxes }, { merge: true }).catch(e =>
-        console.error('Saving to Firestore failed:', e)
-      )
+      setDoc(
+        userDocRef, 
+        { 
+          leitnerBoxes,
+          leitnerPositions,
+          activeSet
+        }, 
+        { merge: true }
+      ).catch(e => console.error('Saving to Firestore failed:', e))
     }
-  }, [leitnerBoxes, currentUser, loadingData])
-
-  const getCountForBox = (boxNumber) => {
-    let count = 0
-    for (let wordId in leitnerBoxes) {
-      if (leitnerBoxes[wordId] === boxNumber) {
-        count++
-      }
-    }
-    return count
-  }
-
-  const getBoxStatus = (box, count) => {
-    if (count === 0) return 'empty'
-    const today = new Date()
-    const lastReview = localStorage.getItem(`lastReview_box_${box}`) || '2000-01-01'
-    const daysSinceReview = Math.floor((today - new Date(lastReview)) / (1000 * 60 * 60 * 24))
-    return daysSinceReview >= box ? 'due' : 'reviewed'
-  }
-
-  const handleReset = async () => {
-    const init = {}
-    wordSets.french.words.forEach(word => {
-      init[word.id] = 1
-    })
-    setLeitnerBoxes(init)
-
-    boxes.forEach(box => {
-      localStorage.removeItem(`lastReview_box_${box}`)
-    })
-    localStorage.setItem('leitnerBoxes', JSON.stringify(init))
-
-    if (currentUser) {
-      try {
-        const userDocRef = doc(db, 'users', currentUser.uid)
-        await setDoc(userDocRef, { leitnerBoxes: init }, { merge: true })
-      } catch (err) {
-        console.error('Failed to reset progress in Firestore:', err)
-      }
-    }
-    setShowResetModal(false)
-  }
+  }, [leitnerBoxes, leitnerPositions, activeSet, currentUser, loadingData])
 
   // Helper to format time
-  const formatTimeSpent = (seconds) => {
+  function formatTimeSpent(seconds) {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     if (hours > 0) {
@@ -148,6 +145,124 @@ function LeitnerPage({ currentUser }) {
     }
   }
 
+  // Auto-check the 80% rule
+  useEffect(() => {
+    if (loadingData) return
+    if (!activeSet) return
+    // total active = activeSet
+    // how many of those are still in box 1?
+    const activeWordIds = allWords.slice(0, activeSet).map(w => w.id)
+    const inBox1Count = activeWordIds.filter(id => leitnerBoxes[id] === 1).length
+    const progressedCount = activeSet - inBox1Count
+    const ratio = progressedCount / activeSet
+    if (ratio >= 0.8 && activeSet < 1000) {
+      // auto add next batch of 100
+      const newActive = Math.min(activeSet + 100, 1000)
+      console.log(`Auto-introducing next batch. newActive = ${newActive}`)
+      // For each newly introduced card, set box=1 if not present
+      allWords.slice(activeSet, newActive).forEach((w, i) => {
+        if (!(w.id in leitnerBoxes)) {
+          leitnerBoxes[w.id] = 1
+          leitnerPositions[w.id] = Date.now() + i
+        }
+      })
+      setLeitnerBoxes({ ...leitnerBoxes })
+      setLeitnerPositions({ ...leitnerPositions })
+      setActiveSet(newActive)
+    }
+  // eslint-disable-next-line
+  }, [activeSet, leitnerBoxes, leitnerPositions, loadingData])
+
+  // Manual button handle
+  const handleAddNextBatch = () => {
+    const newActive = Math.min(activeSet + 100, 1000)
+    if (newActive === activeSet) return
+    allWords.slice(activeSet, newActive).forEach((w, i) => {
+      if (!(w.id in leitnerBoxes)) {
+        leitnerBoxes[w.id] = 1
+        leitnerPositions[w.id] = Date.now() + i
+      }
+    })
+    setLeitnerBoxes({ ...leitnerBoxes })
+    setLeitnerPositions({ ...leitnerPositions })
+    setActiveSet(newActive)
+  }
+
+  const handleReset = async () => {
+    const init = {}
+    allWords.slice(0, 100).forEach(word => {
+      init[word.id] = 1
+    })
+    const initPos = {}
+    allWords.slice(0, 100).forEach((w, i) => {
+      initPos[w.id] = i
+    })
+
+    setLeitnerBoxes(init)
+    setLeitnerPositions(initPos)
+    setActiveSet(100)
+
+    boxes.forEach(box => {
+      localStorage.removeItem(`lastReview_box_${box}`)
+    })
+    localStorage.setItem('leitnerBoxes', JSON.stringify(init))
+
+    if (currentUser) {
+      try {
+        const userDocRef = doc(db, 'users', currentUser.uid)
+        await setDoc(
+          userDocRef, 
+          { 
+            leitnerBoxes: init,
+            leitnerPositions: initPos,
+            activeSet: 100
+          }, 
+          { merge: true }
+        )
+      } catch (err) {
+        console.error('Failed to reset progress in Firestore:', err)
+      }
+    }
+    setShowResetModal(false)
+  }
+
+  // We'll compute wordsMastered quickly if we want to pass it for achievements
+  const wordsMastered = Object.values(leitnerBoxes).filter(b => b === 5).length
+  const userData = {
+    totalTimeSpent,
+    streak,
+    leitnerBoxes,
+    leitnerPositions,
+    achievements: achievementsMap,
+    wordsMastered
+  }
+
+  // compute how many are in each box only among activeSet
+  const getCountForBox = (boxNumber) => {
+    let count = 0
+    const activeIds = allWords.slice(0, activeSet).map(w => w.id)
+    for (const wid of activeIds) {
+      if (leitnerBoxes[wid] === boxNumber) count++
+    }
+    return count
+  }
+
+  // compute “due today”
+  const getDueTodayCount = () => {
+    let total = 0
+    for (let b = 1; b <= 5; b++) {
+      const c = getCountForBox(b)
+      const st = getBoxStatus(b, c)
+      if (st === 'due') {
+        total += c
+      }
+    }
+    return total
+  }
+
+  // “toReview” is how many are in box #1
+  const toReview = getCountForBox(1)
+
   if (loadingData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-lime-50">
@@ -156,21 +271,6 @@ function LeitnerPage({ currentUser }) {
         </div>
       </div>
     )
-  }
-
-  // (NEW) We'll compute wordsMastered quickly if we want to pass it for achievements:
-  const wordsMastered = Object.values(leitnerBoxes).filter(b => b === 5).length
-
-  // (NEW) Build a userData object to pass to AchievementsGallery
-  const userData = {
-    totalTimeSpent,
-    streak,
-    leitnerBoxes,
-    achievements: achievementsMap,
-    wordsMastered, 
-    // If you want to store lastStudyHour or inactiveDays, you can add them here too
-    // lastStudyHour: ...
-    // inactiveDays: ...
   }
 
   return (
@@ -200,9 +300,25 @@ function LeitnerPage({ currentUser }) {
                   </div>
                   <p className="text-gray-500 flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 
-                           2 0 00-2 2v10a2 2 0 002 2z"/>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 
+                           8l7.89 5.26a2 2 
+                           0 
+                           002.22 0L21 
+                           8M5 
+                           19h14a2 
+                           2 0 
+                           002-2V7a2 
+                           2 0 
+                           00-2-2H5a2 
+                           2 0 
+                           00-2 2v10a2 
+                           2 0 
+                           002 2z"
+                      />
                     </svg>
                     {currentUser?.email}
                   </p>
@@ -215,16 +331,33 @@ function LeitnerPage({ currentUser }) {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
                       <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 
-                             01-2 2H5a2 2 0 
-                             01-2-2v-6a2 2 0 
-                             012-2m14 0V9a2 
-                             2 0 00-2-2M5 
-                             11V9a2 2 0 
-                             012-2m0 0V5a2 
-                             2 0 012-2h6a2 
-                             2 0 012 2v2M7 7h10"/>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 11H5m14 0a2 
+                             2 0 
+                             012 2v6a2 
+                             2 0 
+                             01-2 2H5a2 
+                             2 0 
+                             01-2-2v-6a2 
+                             2 0 
+                             012-2m14 
+                             0V9a2 
+                             2 0 
+                             00-2-2M5 
+                             11V9a2 
+                             2 0 
+                             012-2m0 
+                             0V5a2 
+                             2 0 
+                             012-2h6a2 
+                             2 
+                             0 
+                             012 2v2M7 
+                             7h10"
+                        />
                       </svg>
                     </div>
                     <div>
@@ -241,10 +374,17 @@ function LeitnerPage({ currentUser }) {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-lime-50 flex items-center justify-center">
                       <svg className="w-5 h-5 text-lime-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M12 8v4l3 3m6-3a9 9 0 
-                             11-18 0 9 9 0 
-                             0118 0z"/>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 
+                             9 0 
+                             11-18 0 
+                             9 9 0 
+                             0118 
+                             0z"
+                        />
                       </svg>
                     </div>
                     <div>
@@ -278,10 +418,21 @@ function LeitnerPage({ currentUser }) {
                       className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transition-all duration-200"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M3 21v-4m0 0V5a2 
-                             2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 
-                             2 0 00-2 2zm9-13.5V9"/>
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 
+                             21v-4m0 
+                             0V5a2 
+                             2 0 
+                             012-2h6.5l1 1H21l-3 
+                             6 3 
+                             6h-8.5l-1-1H5a2 
+                             2 0 
+                             00-2 
+                             2zm9-13.5V9"
+                        />
                       </svg>
                       View Flagged Cards
                     </Link>
@@ -292,14 +443,100 @@ function LeitnerPage({ currentUser }) {
           </div>
         </div>
 
-        {/* Course Header with Reset Button */}
-                {/* Course Progress Section */}
-                <div className="mb-6">
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Learning Progress
-            </h2>
-          </div>
+        {/* Add this before Learning Progress section */}
+        <div className="mb-12">
+          <Link
+            to="/review/1"
+            className="group relative block w-full max-w-2xl mx-auto px-8 py-6 rounded-2xl overflow-hidden"
+          >
+            {/* Animated gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-700 transform transition-transform duration-500 group-hover:scale-105" />
+            
+            {/* Subtle animated pattern */}
+            <div className="absolute inset-0 opacity-10">
+              <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                <pattern id="pattern" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                  <path d="M0 32V16L16 0H32V16L16 32z" fill="white"/>
+                </pattern>
+                <rect width="100%" height="100%" fill="url(#pattern)"/>
+              </svg>
+            </div>
+
+            {/* Content */}
+            <div className="relative flex items-center justify-between text-white">
+              <div>
+                <h3 className="text-2xl font-bold mb-1">
+                  Start Learning Session
+                </h3>
+                <p className="text-blue-100">
+                  Review cards and strengthen your knowledge
+                </p>
+              </div>
+              <div className="ml-4">
+                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm 
+                              transform transition-transform duration-500 group-hover:rotate-12">
+                  <svg 
+                    className="w-6 h-6 text-white" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Hover effect light */}
+            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 
+                            transform translate-x-[-100%] group-hover:translate-x-[100%] 
+                            transition-transform duration-1000" />
+          </Link>
+        </div>
+
+        {/* Course Progress */}
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">
+            Learning Progress
+          </h2>
+
+          {/* (NEW) Button to manually add next 100 */}
+          {activeSet < 1000 && (
+            <button
+              onClick={handleAddNextBatch}
+              className="group inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-xl 
+                        text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200 
+                        shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md 
+                        backdrop-blur-sm relative overflow-hidden"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                <svg 
+                  className="w-4 h-4 transition-transform group-hover:rotate-12" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
+                </svg>
+                Add Next 100 Words
+                <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                  {activeSet} / 1000
+                </span>
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-50/50 to-transparent 
+                              group-hover:translate-x-full transition-transform duration-500"/>
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between mb-8">
@@ -317,25 +554,32 @@ function LeitnerPage({ currentUser }) {
 
           <button
             onClick={() => setShowResetModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 shadow-sm transition-all duration-200 hover:-translate-y-0.5 group"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl text-gray-700 bg-white 
+                      hover:bg-gray-50 border border-gray-200 shadow-sm transition-all duration-200 hover:-translate-y-0.5 group"
           >
-            <svg 
+            <svg
               className="w-4 h-4 text-gray-500 group-hover:text-gray-700 transition-colors"
-              fill="none" 
+              fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M4 4v5h.582m15.356 
-                   2A8.001 8.001 0 
-                   004.582 9m0 
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 
+                   4v5h.582m15.356 
+                   2A8.001 
+                   8.001 
+                   0 
+                   004.582 
+                   9m0 
                    0H9m11 
                    11v-5h-.581m0 
-                   0a8.003 8.003 
-                   0 01-15.357-2m15.357 
+                   0a8.003 
+                   8.003 
+                   0 
+                   01-15.357-2m15.357 
                    2H15"
               />
             </svg>
@@ -346,32 +590,48 @@ function LeitnerPage({ currentUser }) {
         {/* Summary Stats */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 mb-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* 1) Total Words = 1000 */}
             <div className="text-center p-4">
               <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-800">
-                {words.length}
+                1000
               </div>
               <div className="text-sm text-gray-500">Total Words</div>
             </div>
+
+            {/* 2) Mastered among activeSet */}
             <div className="text-center p-4">
               <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-lime-800">
-                {getCountForBox(5)}
+                {
+                  Object.entries(leitnerBoxes).filter(([wid, box]) => {
+                    const indexInAll = allWords.findIndex(x => x.id === parseInt(wid,10))
+                    if (indexInAll < 0) return false
+                    return indexInAll < activeSet && box === 5
+                  }).length
+                }
               </div>
               <div className="text-sm text-gray-500">Mastered</div>
             </div>
+
+            {/* 3) To Review = Box #1 among activeSet */}
             <div className="text-center p-4">
               <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-800">
-                {getCountForBox(1)}
+                {
+                  Object.entries(leitnerBoxes).filter(([wid, box]) => {
+                    const indexInAll = allWords.findIndex(x => x.id === parseInt(wid,10))
+                    if (indexInAll < 0) return false
+                    return indexInAll < activeSet && box === 1
+                  }).length
+                }
               </div>
               <div className="text-sm text-gray-500">To Review</div>
             </div>
-            <div className="text-center p-4">
-              <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-lime-800">
-                {boxes.reduce((acc, box) => {
-                  const status = getBoxStatus(box, getCountForBox(box))
-                  return status === 'due' ? acc + getCountForBox(box) : acc
-                }, 0)}
+
+            {/* 5) (NEW) Active Cards */}
+            <div className="text-center p-4 md:block">
+              <div className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-purple-800">
+                {activeSet}
               </div>
-              <div className="text-sm text-gray-500">Due Today</div>
+              <div className="text-sm text-gray-500">Active Cards</div>
             </div>
           </div>
         </div>
@@ -379,7 +639,13 @@ function LeitnerPage({ currentUser }) {
         {/* Leitner Boxes */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-12">
           {boxes.map((box) => {
-            const count = getCountForBox(box)
+            // Only count items up to activeSet
+            const count = Object.entries(leitnerBoxes).filter(([wid, b]) => {
+              const idx = allWords.findIndex(x => x.id === parseInt(wid,10))
+              if (idx < 0) return false
+              return idx < activeSet && b === box
+            }).length
+
             const status = getBoxStatus(box, count)
 
             return (
@@ -440,7 +706,7 @@ function LeitnerPage({ currentUser }) {
                               : 'bg-gray-300'
                           }
                         `}
-                        style={{ width: `${(count / words.length) * 100}%` }}
+                        style={{ width: `${(count / activeSet) * 100}%` }}
                       />
                     </div>
 
@@ -458,7 +724,7 @@ function LeitnerPage({ currentUser }) {
                         `}
                       >
                         {status === 'due'
-                          ? 'Review Now'
+                          ? 'Click to Review'
                           : status === 'reviewed'
                           ? 'Up to Date'
                           : 'Empty Box'}
@@ -493,22 +759,27 @@ function LeitnerPage({ currentUser }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M12 9v2m0 
+                      d="M12 
+                         9v2m0 
                          4h.01m-6.938 
                          4h13.856c1.54 
-                         0 2.502-1.667 
+                         0 
+                         2.502-1.667 
                          1.732-3L13.732 
                          4c-.77-1.333-2.694-1.333-3.464 
-                         0L3.34 16c-.77 
-                         1.333.192 3 
-                         1.732 3z"
+                         0L3.34 
+                         16c-.77 
+                         1.333.192 
+                         3 
+                         1.732 
+                         3z"
                     />
                   </svg>
                 </div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Reset Progress?</h3>
                 <p className="text-gray-600">
-                  This will move all words back to Box 1 and reset your review history. 
-                  This action cannot be undone.
+                  This will move all words back to Box 1 and reset your review history 
+                  to only the first 100 words. This action cannot be undone.
                 </p>
               </div>
               <div className="flex gap-3">
